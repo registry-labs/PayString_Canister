@@ -20,10 +20,14 @@ import TrieMap "mo:base/TrieMap";
 import Nat8 "mo:base/Nat8";
 import Buffer "mo:base/Buffer";
 import P "mo:base/Prelude";
+import Address "../models/Address";
+import AddressDetails "../models/AddressDetails";
 
 module {
 
     private type JSON = JSON.JSON;
+    private type Address = Address.Address;
+    private type AddressDetails = AddressDetails.AddressDetails;
 
     public func natToFloat(value : Nat) : Float {
         return Float.fromInt(value);
@@ -102,47 +106,71 @@ module {
         case (?x_) { x_ };
     };
 
-    /*public func metaDataToJSON(tokenId : Nat32, metaData : MetaData) : JSON {
+    public func addressToJSON(address : Address) : JSON {
         let map : HashMap.HashMap<Text, JSON> = HashMap.HashMap<Text, JSON>(
             0,
             Text.equal,
             Text.hash,
         );
 
-        map.put("id", #String(Nat32.toText(tokenId)));
-        map.put("icon", #String(metaData.icon));
-        map.put("symbol", #String(metaData.symbol));
-        map.put("name", #String(metaData.name));
-        map.put("decimals", #Number(metaData.decimals));
-        map.put("address", #String(metaData.address));
-        map.put("network", #String(metaData.network));
+        let addressDetails = _addressDetailaToJSON(address.addressDetails);
 
-        switch (metaData.chain) {
-            case (#IC(value)) map.put("chain", #String("IC"));
-            case (#EVM(value)) map.put("chain", #String("EVM"));
-            case (#BTC(value)) map.put("chain", #String("BTC"));
+        map.put("paymentNetwork", #String(address.paymentNetwork));
+        map.put("addressDetails", #Object(addressDetails));
+
+        switch (address.addressDetailsType) {
+            case (#CryptoAddress) {
+                map.put("addressDetailsType", #String("CryptoAddressDetails"));
+            };
+            case (#FiatAddress) {
+                map.put("addressDetailsType", #String("FiatAddressDetails"));
+            };
         };
 
-        switch (metaData.standard) {
-            case (#DIP20(value)) map.put("standard", #String("DIP20"));
-            case (#DIP20_EXT(value)) map.put("standard", #String("DIP20_EXT"));
-            case (#ICRC1(value)) map.put("standard", #String("ICRC1"));
-            case (#ICRC2(value)) map.put("standard", #String("ICRC2"));
-            case (#ERC20(value)) map.put("standard", #String("ERC20"));
-            case (#BRC20(value)) map.put("standard", #String("BRC20"));
+        switch (address.environment) {
+            case (?environment) {
+                map.put("environment", #String(environment));
+            };
+            case (_) {
+
+            };
         };
 
         #Object(Iter.toArray(map.entries()));
     };
 
-    public func standardToJSON(standard:Standard) : JSON {
-        switch (standard) {
-            case (#DIP20) #String("DIP20");
-            case (#DIP20_EXT) #String("DIP20_EXT");
-            case (#ICRC1) #String("ICRC1");
-            case (#ICRC2) #String("ICRC2");
-            case (#ERC20) #String("ERC20");
-            case (#BRC20) #String("BRC20");
+    private func _addressDetailaToJSON(addressDetails : AddressDetails) : [(Text, JSON)] {
+        let map : HashMap.HashMap<Text, JSON> = HashMap.HashMap<Text, JSON>(
+            0,
+            Text.equal,
+            Text.hash,
+        );
+
+        switch (addressDetails) {
+            case (#CryptoAddressDetails(value)) {
+                map.put("address", #String(value.address));
+                switch (value.tag) {
+                    case (?tag) {
+                        map.put("tag", #String(tag));
+                    };
+                    case (_) {
+
+                    };
+                };
+            };
+            case (#FiatAddressDetails(value)) {
+                map.put("accountNumber", #String("accountNumber"));
+                switch (value.routingNumber) {
+                    case (?routingNumber) {
+                        map.put("routingNumber", #String(routingNumber));
+                    };
+                    case (_) {
+
+                    };
+                };
+            };
         };
-    };*/
+
+        Iter.toArray(map.entries());
+    };
 };
