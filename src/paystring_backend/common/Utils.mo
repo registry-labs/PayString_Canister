@@ -116,7 +116,8 @@ module {
 
         var addressesJSON : Buffer.Buffer<JSON> = Buffer.fromArray([]);
 
-        map.put("payId", #String(payId));
+        let _payId = Text.concat(payId#"$",Constants.Domain);
+        map.put("payId", #String(_payId));
 
         for (address in addresses.vals()) {
             let _map : HashMap.HashMap<Text, JSON> = HashMap.HashMap<Text, JSON>(
