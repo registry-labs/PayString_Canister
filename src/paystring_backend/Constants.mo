@@ -1,3 +1,3 @@
 module {
-    public let Domain = "";
+    public let Domain = "awesome.com";
 }
