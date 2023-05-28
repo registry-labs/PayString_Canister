@@ -22,6 +22,7 @@ import Buffer "mo:base/Buffer";
 import P "mo:base/Prelude";
 import Address "../models/Address";
 import AddressDetails "../models/AddressDetails";
+import Constants "../Constants";
 
 module {
 
@@ -106,35 +107,52 @@ module {
         case (?x_) { x_ };
     };
 
-    public func addressToJSON(address : Address) : JSON {
+    public func addressToJSON(payId : Text, addresses : [Address]) : JSON {
         let map : HashMap.HashMap<Text, JSON> = HashMap.HashMap<Text, JSON>(
             0,
             Text.equal,
             Text.hash,
         );
 
-        let addressDetails = _addressDetailaToJSON(address.addressDetails);
+        var addressesJSON : Buffer.Buffer<JSON> = Buffer.fromArray([]);
 
-        map.put("paymentNetwork", #String(address.paymentNetwork));
-        map.put("addressDetails", #Object(addressDetails));
+        map.put("payId", #String(payId));
 
-        switch (address.addressDetailsType) {
-            case (#CryptoAddress) {
-                map.put("addressDetailsType", #String("CryptoAddressDetails"));
+        for (address in addresses.vals()) {
+            let _map : HashMap.HashMap<Text, JSON> = HashMap.HashMap<Text, JSON>(
+                0,
+                Text.equal,
+                Text.hash,
+            );
+
+            let addressDetails = _addressDetailaToJSON(address.addressDetails);
+
+            _map.put("paymentNetwork", #String(address.paymentNetwork));
+            _map.put("addressDetails", #Object(addressDetails));
+
+            switch (address.addressDetailsType) {
+                case (#CryptoAddress) {
+                    _map.put("addressDetailsType", #String("CryptoAddressDetails"));
+                };
+                case (#FiatAddress) {
+                    _map.put("addressDetailsType", #String("FiatAddressDetails"));
+                };
             };
-            case (#FiatAddress) {
-                map.put("addressDetailsType", #String("FiatAddressDetails"));
+
+            switch (address.environment) {
+                case (?environment) {
+                    _map.put("environment", #String(environment));
+                };
+                case (_) {
+
+                };
             };
+
+            let json = #Object(Iter.toArray(_map.entries()));
+            addressesJSON.add(json);
         };
 
-        switch (address.environment) {
-            case (?environment) {
-                map.put("environment", #String(environment));
-            };
-            case (_) {
-
-            };
-        };
+        map.put("addresses", #Array(Buffer.toArray(addressesJSON)));
 
         #Object(Iter.toArray(map.entries()));
     };
