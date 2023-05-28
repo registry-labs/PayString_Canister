@@ -1,0 +1,29 @@
+{
+  "canisters": {
+    "paystring_backend": {
+      "main": "src/paystring_backend/main.mo",
+      "type": "motoko"
+    },
+    "paystring_frontend": {
+      "dependencies": [
+        "paystring_backend"
+      ],
+      "frontend": {
+        "entrypoint": "src/paystring_frontend/src/index.html"
+      },
+      "source": [
+        "src/paystring_frontend/assets",
+        "dist/paystring_frontend/"
+      ],
+      "type": "assets"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}
