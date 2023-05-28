@@ -38,8 +38,26 @@ actor class PayString() = this {
   public shared ({ caller }) func create(request : AddressRequest) : async () {
     let currentPayStringId = payStringId;
     payStringId := payStringId + 1;
+    let addresses : Buffer.Buffer<Address> = Buffer.fromArray([]);
+    for (address in request.addresses.vals()) {
+      var environment:?Text = null;
+      switch(address.environment){
+        case(?_environment) environment := ?Utils.toLowerCase(_environment);
+        case(_){
+
+        };
+      };
+      let _address : Address = {
+        paymentNetwork = Utils.toLowerCase(address.paymentNetwork);
+        environment = environment;
+        addressDetailsType = address.addressDetailsType;
+        addressDetails = address.addressDetails;
+      };
+      addresses.add(_address);
+    };
     manifest := HashMap.insert(manifest, caller, pHash, pEqual, request.payId).0;
-    payStrings := HashMap.insert(payStrings, request.payId, tHash, tEqual, request.addresses).0;
+    payStrings := HashMap.insert(payStrings, request.payId, tHash, tEqual, Buffer.toArray(addresses)).0;
+
   };
 
   public shared ({ caller }) func delete() : async () {
@@ -100,7 +118,7 @@ actor class PayString() = this {
   private func _payIdResponse(payId : Text, headers : HttpParser.Headers) : HttpParser.HttpResponse {
     let _headers = headers.get("Accept");
     var addressBuffer : Buffer.Buffer<JSON> = Buffer.fromArray([]);
-    var json:JSON = #Null;
+    var json : JSON = #Null;
     switch (_headers) {
       case (?_headers) {
         if (_headers.size() < 1) return Http.BAD_REQUEST();
@@ -108,17 +126,20 @@ actor class PayString() = this {
         let exist = HashMap.get(payStrings, payId, tHash, tEqual);
         switch (exist) {
           case (?exist) {
-            if(currency.paymentNetwork == "payid") json := Utils.addressToJSON(payId,exist);
-            let address = Array.find(exist,func(e:Address):Bool{
-              e.paymentNetwork == currency.paymentNetwork and e.environment == currency.environment
-            });
-            switch(address){
-              case(?address){
-                json := Utils.addressToJSON(payId,[address]);
+            if (currency.paymentNetwork == "payid") json := Utils.addressToJSON(payId, exist);
+            let address = Array.find(
+              exist,
+              func(e : Address) : Bool {
+                e.paymentNetwork == currency.paymentNetwork and e.environment == currency.environment
+              },
+            );
+            switch (address) {
+              case (?address) {
+                json := Utils.addressToJSON(payId, [address]);
               };
-              case(_){
+              case (_) {
                 return return Http.NOT_FOUND();
-              }
+              };
             };
           };
           case (_) {
