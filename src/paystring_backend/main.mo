@@ -35,26 +35,26 @@ actor class PayString() = this {
   private stable var manifest = HashMap.empty<Principal, Text>();
   private stable var payStrings = HashMap.empty<Text, [Address]>();
 
-  public shared({caller}) func create(request:AddressRequest): async () {
+  public shared ({ caller }) func create(request : AddressRequest) : async () {
     let currentPayStringId = payStringId;
     payStringId := payStringId + 1;
-    manifest := HashMap.insert(manifest,caller,pHash,pEqual,request.payId).0;
-    payStrings := HashMap.insert(payStrings,request.payId,tHash,tEqual,request.addresses).0;
+    manifest := HashMap.insert(manifest, caller, pHash, pEqual, request.payId).0;
+    payStrings := HashMap.insert(payStrings, request.payId, tHash, tEqual, request.addresses).0;
   };
 
-  public shared({caller}) func delete(): async () {
-    assert(payStringId > 0);
+  public shared ({ caller }) func delete() : async () {
+    assert (payStringId > 0);
     let currentPayStringId = payStringId;
     payStringId := payStringId - 1;
-    let exist = HashMap.get(manifest,caller,pHash,pEqual);
-    switch(exist){
-      case(?exist){
-        manifest := HashMap.remove(manifest,caller,pHash,pEqual).0;
-        payStrings := HashMap.remove(payStrings,exist,tHash,tEqual).0;
+    let exist = HashMap.get(manifest, caller, pHash, pEqual);
+    switch (exist) {
+      case (?exist) {
+        manifest := HashMap.remove(manifest, caller, pHash, pEqual).0;
+        payStrings := HashMap.remove(payStrings, exist, tHash, tEqual).0;
       };
-      case(_){
+      case (_) {
 
-      }
+      };
     };
   };
 
@@ -68,11 +68,11 @@ actor class PayString() = this {
       case (_) {
         let path = Iter.toArray(Text.tokens(url.original, #text("/")));
         if (path.size() == 2) {
-          let blob = Text.encodeUtf8(path[1]);
-          _blobResponse(blob);
-        }else{
-         return return Http.BAD_REQUEST();
-        }
+          let payId = path[1];
+          _payIdResponse(payId, headers);
+        } else {
+          return Http.BAD_REQUEST();
+        };
       };
     };
 
@@ -97,16 +97,43 @@ actor class PayString() = this {
     };
   };
 
-  private func _payIdResponse(url : HttpParser.URL) : HttpParser.HttpResponse {
-    let search = url.queryObj.get("query");
-    var tokensBuffer : Buffer.Buffer<JSON> = Buffer.fromArray([]);
-    let json = #Array(Buffer.toArray(tokensBuffer));
-    let blob = Text.encodeUtf8(JSON.show(json));
-    let response : HttpParser.HttpResponse = {
-      status_code = 200;
-      headers = [("Content-Type", "application/json")];
-      body = blob;
+  private func _payIdResponse(payId : Text, headers : HttpParser.Headers) : HttpParser.HttpResponse {
+    let _headers = headers.get("Accept");
+    var addressBuffer : Buffer.Buffer<JSON> = Buffer.fromArray([]);
+    var json:JSON = #Null;
+    switch (_headers) {
+      case (?_headers) {
+        if (_headers.size() < 1) return Http.BAD_REQUEST();
+        let currency = Utils.getCurrenyFromText(_headers[0]);
+        let exist = HashMap.get(payStrings, payId, tHash, tEqual);
+        switch (exist) {
+          case (?exist) {
+            if(currency.paymentNetwork == "payid") json := Utils.addressToJSON(payId,exist);
+            let address = Array.find(exist,func(e:Address):Bool{
+              e.paymentNetwork == currency.paymentNetwork and e.environment == currency.environment
+            });
+            switch(address){
+              case(?address){
+                json := Utils.addressToJSON(payId,[address]);
+              };
+              case(_){
+                return return Http.NOT_FOUND();
+              }
+            };
+          };
+          case (_) {
+            return return Http.NOT_FOUND();
+          };
+        };
+        let blob = Text.encodeUtf8(JSON.show(json));
+        let response : HttpParser.HttpResponse = {
+          status_code = 200;
+          headers = [("Content-Type", "application/json")];
+          body = blob;
+        };
+      };
+      case (_) return Http.BAD_REQUEST();
     };
   };
-  
+
 };

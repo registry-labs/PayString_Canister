@@ -192,4 +192,16 @@ module {
 
         Iter.toArray(map.entries());
     };
+
+    public func getCurrenyFromText(text:Text): {paymentNetwork:Text;environment:?Text} {
+        let path = Iter.toArray(Text.tokens(text, #text("/")));
+        let _path = Iter.toArray(Text.tokens(path[1], #text("+")));
+        let value = Iter.toArray(Text.tokens(_path[0], #text("-")));
+        let paymentNetwork = value[0];
+        let environment = value[1];
+        {
+            paymentNetwork = paymentNetwork;
+            environment = ?environment;
+        }
+    }
 };
