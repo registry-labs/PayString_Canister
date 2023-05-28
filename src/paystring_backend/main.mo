@@ -13,6 +13,8 @@ import Option "mo:base/Option";
 import Utils "./common/Utils";
 import Http "./common/http";
 import Error "mo:base/Error";
+import AddressRequest "models/AddressRequest";
+import Address "models/Address";
 
 actor class PayString() = this {
 
@@ -26,6 +28,35 @@ actor class PayString() = this {
   let n32Equal = Nat32.equal;
 
   private type JSON = JSON.JSON;
+  private type AddressRequest = AddressRequest.AddressRequest;
+  private type Address = Address.Address;
+
+  private stable var payStringId : Nat32 = 1;
+  private stable var manifest = HashMap.empty<Principal, Text>();
+  private stable var payStrings = HashMap.empty<Text, [Address]>();
+
+  public shared({caller}) func create(request:AddressRequest): async () {
+    let currentPayStringId = payStringId;
+    payStringId := payStringId + 1;
+    manifest := HashMap.insert(manifest,caller,pHash,pEqual,request.payId).0;
+    payStrings := HashMap.insert(payStrings,request.payId,tHash,tEqual,request.addresses).0;
+  };
+
+  public shared({caller}) func delete(): async () {
+    assert(payStringId > 0);
+    let currentPayStringId = payStringId;
+    payStringId := payStringId - 1;
+    let exist = HashMap.get(manifest,caller,pHash,pEqual);
+    switch(exist){
+      case(?exist){
+        manifest := HashMap.remove(manifest,caller,pHash,pEqual).0;
+        payStrings := HashMap.remove(payStrings,exist,tHash,tEqual).0;
+      };
+      case(_){
+
+      }
+    };
+  };
 
   public query func http_request(request : HttpParser.HttpRequest) : async HttpParser.HttpResponse {
     let req = HttpParser.parse(request);
