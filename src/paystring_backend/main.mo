@@ -40,10 +40,10 @@ actor class PayString() = this {
     payStringId := payStringId + 1;
     let addresses : Buffer.Buffer<Address> = Buffer.fromArray([]);
     for (address in request.addresses.vals()) {
-      var environment:?Text = null;
-      switch(address.environment){
-        case(?_environment) environment := ?Utils.toLowerCase(_environment);
-        case(_){
+      var environment : ?Text = null;
+      switch (address.environment) {
+        case (?_environment) environment := ?Utils.toLowerCase(_environment);
+        case (_) {
 
         };
       };
@@ -126,7 +126,15 @@ actor class PayString() = this {
         let exist = HashMap.get(payStrings, payId, tHash, tEqual);
         switch (exist) {
           case (?exist) {
-            if (currency.paymentNetwork == "payid") json := Utils.addressToJSON(payId, exist);
+            if (currency.paymentNetwork == "payid") {
+              json := Utils.addressToJSON(payId, exist);
+              let blob = Text.encodeUtf8(JSON.show(json));
+              return {
+                status_code = 200;
+                headers = [("Content-Type", "application/json")];
+                body = blob;
+              };
+            };
             let address = Array.find(
               exist,
               func(e : Address) : Bool {
