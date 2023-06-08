@@ -15,6 +15,7 @@ import Http "./common/http";
 import Error "mo:base/Error";
 import AddressRequest "models/AddressRequest";
 import Address "models/Address";
+import Constants "Constants";
 
 actor class PayString() = this {
 
@@ -36,6 +37,8 @@ actor class PayString() = this {
   private stable var payStrings = HashMap.empty<Text, [Address]>();
 
   public shared ({ caller }) func create(request : AddressRequest) : async () {
+    let payStringExist = _payStringExist(request.payId);
+    if(payStringExist) throw(Error.reject("Paystring Already Exist"));
     let currentPayStringId = payStringId;
     payStringId := payStringId + 1;
     let addresses : Buffer.Buffer<Address> = Buffer.fromArray([]);
@@ -57,6 +60,29 @@ actor class PayString() = this {
     };
     manifest := HashMap.insert(manifest, caller, pHash, pEqual, request.payId).0;
     payStrings := HashMap.insert(payStrings, request.payId, tHash, tEqual, Buffer.toArray(addresses)).0;
+
+  };
+
+  public shared ({ caller }) func update(request : AddressRequest) : async () {
+    let payString = await* _getPayString(caller);
+    let addresses : Buffer.Buffer<Address> = Buffer.fromArray([]);
+    for (address in request.addresses.vals()) {
+      var environment : ?Text = null;
+      switch (address.environment) {
+        case (?_environment) environment := ?Utils.toLowerCase(_environment);
+        case (_) {
+
+        };
+      };
+      let _address : Address = {
+        paymentNetwork = Utils.toLowerCase(address.paymentNetwork);
+        environment = environment;
+        addressDetailsType = address.addressDetailsType;
+        addressDetails = address.addressDetails;
+      };
+      addresses.add(_address);
+    };
+    payStrings := HashMap.insert(payStrings, payString, tHash, tEqual, Buffer.toArray(addresses)).0;
 
   };
 
@@ -96,6 +122,23 @@ actor class PayString() = this {
 
   };
 
+  private func _payStringExist(payString:Text): Bool {
+    let exist = HashMap.get(payStrings,payString,tHash,tEqual);
+
+    switch(exist){
+      case(?exist) true;
+      case(null) false;
+    };
+  };
+
+  private func _getPayString(owner:Principal): async* Text {
+    let exist = HashMap.get(manifest,owner,pHash,pEqual);
+    switch(exist){
+      case(?exist) exist;
+      case(null) throw(Error.reject("Paystring Not Found"));
+    };
+  };
+
   private func _blobResponse(blob : Blob) : Http.Response {
     let response : Http.Response = {
       status_code = 200;
@@ -116,13 +159,24 @@ actor class PayString() = this {
   };
 
   private func _payIdResponse(payId : Text, headers : HttpParser.Headers) : HttpParser.HttpResponse {
-    let _headers = headers.get("Accept");
+    let acceptHeader = headers.get("Accept");
+    let versionHeader = headers.get("PayID-Version");
+
+    switch(versionHeader){
+      case(?versionHeader){
+        if(versionHeader[0] != Constants.Version) return Http.BAD_REQUEST();
+      };
+      case(null){
+        return Http.BAD_REQUEST();
+      };
+    };
+    
     var addressBuffer : Buffer.Buffer<JSON> = Buffer.fromArray([]);
     var json : JSON = #Null;
-    switch (_headers) {
-      case (?_headers) {
-        if (_headers.size() < 1) return Http.BAD_REQUEST();
-        let currency = Utils.getCurrenyFromText(_headers[0]);
+    switch (acceptHeader) {
+      case (?acceptHeader) {
+        if (acceptHeader.size() < 1) return Http.BAD_REQUEST();
+        let currency = Utils.getCurrenyFromText(acceptHeader[0]);
         let exist = HashMap.get(payStrings, payId, tHash, tEqual);
         switch (exist) {
           case (?exist) {
