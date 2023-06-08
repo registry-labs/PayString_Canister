@@ -32,15 +32,17 @@ actor class PayString() = this {
   private type AddressRequest = AddressRequest.AddressRequest;
   private type Address = Address.Address;
 
-  private stable var payStringId : Nat32 = 1;
-  private stable var manifest = HashMap.empty<Principal, Text>();
-  private stable var payStrings = HashMap.empty<Text, [Address]>();
+  private stable var payIdCount : Nat32 = 1;
+  private stable var manifest = HashMap.empty<Principal, [Text]>();
+  private stable var payIds = HashMap.empty<Text, [Address]>();
 
   public shared ({ caller }) func create(request : AddressRequest) : async () {
+    if(request.payId.size() < 1) throw(Error.reject("Bad Request"));
+    let payId = Utils.toLowerCase(request.payId);
     let payStringExist = _payStringExist(request.payId);
     if(payStringExist) throw(Error.reject("Paystring Already Exist"));
-    let currentPayStringId = payStringId;
-    payStringId := payStringId + 1;
+    let currentpayIdCount = payIdCount;
+    payIdCount := payIdCount + 1;
     let addresses : Buffer.Buffer<Address> = Buffer.fromArray([]);
     for (address in request.addresses.vals()) {
       var environment : ?Text = null;
@@ -58,13 +60,15 @@ actor class PayString() = this {
       };
       addresses.add(_address);
     };
-    manifest := HashMap.insert(manifest, caller, pHash, pEqual, request.payId).0;
-    payStrings := HashMap.insert(payStrings, request.payId, tHash, tEqual, Buffer.toArray(addresses)).0;
+    manifest := HashMap.insert(manifest, caller, pHash, pEqual, [payId]).0;
+    payIds := HashMap.insert(payIds, payId, tHash, tEqual, Buffer.toArray(addresses)).0;
 
   };
 
-  public shared ({ caller }) func update(request : AddressRequest) : async () {
-    let payString = await* _getPayString(caller);
+  public shared ({ caller }) func update(payId:Text,request : AddressRequest) : async () {
+    let _payId = Utils.toLowerCase(payId);
+    let isOwner = await* _isOwner(caller,_payId);
+    if (isOwner == false) throw(Error.reject("UnAuthorized"));
     let addresses : Buffer.Buffer<Address> = Buffer.fromArray([]);
     for (address in request.addresses.vals()) {
       var environment : ?Text = null;
@@ -82,24 +86,26 @@ actor class PayString() = this {
       };
       addresses.add(_address);
     };
-    payStrings := HashMap.insert(payStrings, payString, tHash, tEqual, Buffer.toArray(addresses)).0;
+    payIds := HashMap.insert(payIds, _payId, tHash, tEqual, Buffer.toArray(addresses)).0;
 
   };
 
-  public shared ({ caller }) func delete() : async () {
-    assert (payStringId > 0);
-    let currentPayStringId = payStringId;
-    payStringId := payStringId - 1;
-    let exist = HashMap.get(manifest, caller, pHash, pEqual);
-    switch (exist) {
-      case (?exist) {
-        manifest := HashMap.remove(manifest, caller, pHash, pEqual).0;
-        payStrings := HashMap.remove(payStrings, exist, tHash, tEqual).0;
-      };
-      case (_) {
+  public shared ({ caller }) func delete(payId:Text) : async () {
+    assert (payIdCount > 0);
+    if(payId.size() < 1) throw(Error.reject("Bad Request"));
+    let currentpayIdCount = payIdCount;
+    payIdCount := payIdCount - 1;
+    let isOwner = await* _isOwner(caller,payId);
+    if(isOwner == false) throw(Error.reject("UnAuthroized"));
+    payIds := HashMap.remove(payIds, payId, tHash, tEqual).0;
+  };
 
-      };
-    };
+  public query func getPayIdCount(): async Nat32 {
+    payIdCount
+  };
+
+  public query({caller}) func fetchPayIds(): async [Text] {
+    _fetchPayIds(caller)
   };
 
   public query func http_request(request : HttpParser.HttpRequest) : async HttpParser.HttpResponse {
@@ -116,6 +122,7 @@ actor class PayString() = this {
           _payIdResponse(payId, headers);
         } else {
           return Http.BAD_REQUEST();
+          //return _headerResponse("Origin",headers);
         };
       };
     };
@@ -123,7 +130,7 @@ actor class PayString() = this {
   };
 
   private func _payStringExist(payString:Text): Bool {
-    let exist = HashMap.get(payStrings,payString,tHash,tEqual);
+    let exist = HashMap.get(payIds,payString,tHash,tEqual);
 
     switch(exist){
       case(?exist) true;
@@ -131,11 +138,20 @@ actor class PayString() = this {
     };
   };
 
-  private func _getPayString(owner:Principal): async* Text {
+  private func _isOwner(caller:Principal,payString:Text): async* Bool {
+    let _payIds = _fetchPayIds(caller);
+    let exist = Array.find(_payIds,func(e:Text):Bool{e == payString});
+    switch(exist){
+      case(?exist) true;
+      case(null) false;
+    };
+  };
+
+  private func _fetchPayIds(owner:Principal): [Text] {
     let exist = HashMap.get(manifest,owner,pHash,pEqual);
     switch(exist){
       case(?exist) exist;
-      case(null) throw(Error.reject("Paystring Not Found"));
+      case(null) [];
     };
   };
 
@@ -144,6 +160,25 @@ actor class PayString() = this {
       status_code = 200;
       headers = [("Content-Type", "application/json")];
       body = blob;
+      streaming_strategy = null;
+    };
+  };
+
+  private func _headerResponse(key:Text,headers : HttpParser.Headers) : Http.Response {
+    let originHeader = headers.get(key);
+    var result = "";
+    switch(originHeader){
+      case(?originHeader){
+        result := originHeader[0]
+      };
+      case(null){
+        return Http.BAD_REQUEST();
+      };
+    };
+    let response : Http.Response = {
+      status_code = 200;
+      headers = [("Content-Type", "application/json")];
+      body = Text.encodeUtf8(result);
       streaming_strategy = null;
     };
   };
@@ -177,7 +212,7 @@ actor class PayString() = this {
       case (?acceptHeader) {
         if (acceptHeader.size() < 1) return Http.BAD_REQUEST();
         let currency = Utils.getCurrenyFromText(acceptHeader[0]);
-        let exist = HashMap.get(payStrings, payId, tHash, tEqual);
+        let exist = HashMap.get(payIds, payId, tHash, tEqual);
         switch (exist) {
           case (?exist) {
             if (currency.paymentNetwork == "payid") {
