@@ -123,7 +123,7 @@ actor class PayString() = this {
 
   private func _isMaleName(name : Text) : Bool {
     let exist = Array.find(MaleNames.names,func(e:Text):Bool {
-      name == e
+      Utils.toLowerCase(name) == Utils.toLowerCase(e)
     });
     switch(exist){
       case(?exist){
@@ -137,7 +137,7 @@ actor class PayString() = this {
 
   private func _isFemaleName(name : Text) : Bool {
     let exist = Array.find(FemaleNames.names,func(e:Text):Bool {
-      name == e
+      Utils.toLowerCase(name) == Utils.toLowerCase(e)
     });
     switch(exist){
       case(?exist){
@@ -151,7 +151,7 @@ actor class PayString() = this {
 
   private func _isFemaleName2(name : Text) : Bool {
     let exist = Array.find(FemaleNames2.names,func(e:Text):Bool {
-      name == e
+      Utils.toLowerCase(name) == Utils.toLowerCase(e)
     });
     switch(exist){
       case(?exist){
