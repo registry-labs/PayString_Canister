@@ -16,6 +16,9 @@ import Error "mo:base/Error";
 import AddressRequest "models/AddressRequest";
 import Address "models/Address";
 import Constants "Constants";
+import FemaleNames "common/FemaleNames";
+import FemaleNames2 "common/FemaleNames2";
+import MaleNames "common/MaleNames";
 
 actor class PayString() = this {
 
@@ -35,12 +38,22 @@ actor class PayString() = this {
   private stable var payIdCount : Nat32 = 1;
   private stable var manifest = HashMap.empty<Principal, [Text]>();
   private stable var payIds = HashMap.empty<Text, [Address]>();
+  private stable var admins = StableBuffer.init<(Principal)>();
+  private stable var prices = HashMap.empty<Nat32, Nat>();
+
+  StableBuffer.add(admins, Principal.fromText("j26ec-ix7zw-kiwcx-ixw6w-72irq-zsbyr-4t7fk-alils-u33an-kh6rk-7qe"));
+  StableBuffer.add(admins, Principal.fromText("ve3v4-o7xuv-ijejl-vcyfx-hjy3b-owwtx-jte2k-2bciw-spskd-jgmvd-rqe"));
+
+  public shared ({ caller }) func setPrice(symbolSize : Nat32, price : Nat) : async () {
+    await* _isAdmin(caller);
+    prices := HashMap.insert(prices, symbolSize, n32Hash, n32Equal, price).0;
+  };
 
   public shared ({ caller }) func create(request : AddressRequest) : async () {
-    if(request.payId.size() < 1) throw(Error.reject("Bad Request"));
+    if (request.payId.size() < 1) throw (Error.reject("Bad Request"));
     let payId = Utils.toLowerCase(request.payId);
     let payStringExist = _payStringExist(request.payId);
-    if(payStringExist) throw(Error.reject("Paystring Already Exist"));
+    if (payStringExist) throw (Error.reject("Paystring Already Exist"));
     let currentpayIdCount = payIdCount;
     payIdCount := payIdCount + 1;
     let addresses : Buffer.Buffer<Address> = Buffer.fromArray([]);
@@ -65,10 +78,10 @@ actor class PayString() = this {
 
   };
 
-  public shared ({ caller }) func update(payId:Text,request : AddressRequest) : async () {
+  public shared ({ caller }) func update(payId : Text, request : AddressRequest) : async () {
     let _payId = Utils.toLowerCase(payId);
-    let isOwner = await* _isOwner(caller,_payId);
-    if (isOwner == false) throw(Error.reject("UnAuthorized"));
+    let isOwner = await* _isOwner(caller, _payId);
+    if (isOwner == false) throw (Error.reject("UnAuthorized"));
     let addresses : Buffer.Buffer<Address> = Buffer.fromArray([]);
     for (address in request.addresses.vals()) {
       var environment : ?Text = null;
@@ -90,22 +103,72 @@ actor class PayString() = this {
 
   };
 
-  public shared ({ caller }) func delete(payId:Text) : async () {
+  public shared ({ caller }) func delete(payId : Text) : async () {
     assert (payIdCount > 0);
-    if(payId.size() < 1) throw(Error.reject("Bad Request"));
+    if (payId.size() < 1) throw (Error.reject("Bad Request"));
     let currentpayIdCount = payIdCount;
     payIdCount := payIdCount - 1;
-    let isOwner = await* _isOwner(caller,payId);
-    if(isOwner == false) throw(Error.reject("UnAuthroized"));
+    let isOwner = await* _isOwner(caller, payId);
+    if (isOwner == false) throw (Error.reject("UnAuthroized"));
     payIds := HashMap.remove(payIds, payId, tHash, tEqual).0;
   };
 
-  public query func getPayIdCount(): async Nat32 {
-    payIdCount
+  public query func payStringExist(payString : Text) : async Bool {
+    _payStringExist(payString);
   };
 
-  public query({caller}) func fetchPayIds(): async [Text] {
-    _fetchPayIds(caller)
+  public query func getPrice(name : Text) : async Nat {
+    _getPrice(name);
+  };
+
+  private func _isMaleName(name : Text) : Bool {
+    let exist = Array.find(MaleNames.names,func(e:Text):Bool {
+      name == e
+    });
+    switch(exist){
+      case(?exist){
+        return true
+      };
+      case(null){
+        return false
+      }
+    }
+  };
+
+  private func _isFemaleName(name : Text) : Bool {
+    let exist = Array.find(FemaleNames.names,func(e:Text):Bool {
+      name == e
+    });
+    switch(exist){
+      case(?exist){
+        return true
+      };
+      case(null){
+        return false
+      }
+    }
+  };
+
+  private func _isFemaleName2(name : Text) : Bool {
+    let exist = Array.find(FemaleNames2.names,func(e:Text):Bool {
+      name == e
+    });
+    switch(exist){
+      case(?exist){
+        return true
+      };
+      case(null){
+        return false
+      }
+    }
+  };
+
+  public query func getPayIdCount() : async Nat32 {
+    payIdCount;
+  };
+
+  public query ({ caller }) func fetchPayIds() : async [Text] {
+    _fetchPayIds(caller);
   };
 
   public query func http_request(request : HttpParser.HttpRequest) : async HttpParser.HttpResponse {
@@ -129,29 +192,57 @@ actor class PayString() = this {
 
   };
 
-  private func _payStringExist(payString:Text): Bool {
-    let exist = HashMap.get(payIds,payString,tHash,tEqual);
+  private func _getPrice(name : Text) : Nat {
 
-    switch(exist){
-      case(?exist) true;
-      case(null) false;
+    if(_isMaleName(name)){
+      return 1000000000
+    }else if(_isFemaleName(name)){
+      return 1000000000
+    }else if(_isFemaleName2(name)){
+      return 1000000000
+    };
+
+    let exist = HashMap.get(prices, Nat32.fromNat(name.size()), n32Hash, n32Equal);
+    switch (exist) {
+      case (?exist) exist;
+      case (_) 300000000;
     };
   };
 
-  private func _isOwner(caller:Principal,payString:Text): async* Bool {
+  private func _isAdmin(principal : Principal) : async* () {
+    let adminArray = StableBuffer.toArray(admins);
+    let exist = Array.find(adminArray, func(e : Principal) : Bool { e == principal });
+    switch (exist) {
+      case (?exist) {};
+      case (_) {
+        throw (Error.reject("UnAuthorized"));
+      };
+    };
+  };
+
+  private func _payStringExist(payString : Text) : Bool {
+    let exist = HashMap.get(payIds, payString, tHash, tEqual);
+
+    switch (exist) {
+      case (?exist) true;
+      case (null) false;
+    };
+  };
+
+  private func _isOwner(caller : Principal, payString : Text) : async* Bool {
     let _payIds = _fetchPayIds(caller);
-    let exist = Array.find(_payIds,func(e:Text):Bool{e == payString});
-    switch(exist){
-      case(?exist) true;
-      case(null) false;
+    let exist = Array.find(_payIds, func(e : Text) : Bool { e == payString });
+    switch (exist) {
+      case (?exist) true;
+      case (null) false;
     };
   };
 
-  private func _fetchPayIds(owner:Principal): [Text] {
-    let exist = HashMap.get(manifest,owner,pHash,pEqual);
-    switch(exist){
-      case(?exist) exist;
-      case(null) [];
+  private func _fetchPayIds(owner : Principal) : [Text] {
+    let exist = HashMap.get(manifest, owner, pHash, pEqual);
+    switch (exist) {
+      case (?exist) exist;
+      case (null)[];
     };
   };
 
@@ -164,14 +255,14 @@ actor class PayString() = this {
     };
   };
 
-  private func _headerResponse(key:Text,headers : HttpParser.Headers) : Http.Response {
+  private func _headerResponse(key : Text, headers : HttpParser.Headers) : Http.Response {
     let originHeader = headers.get(key);
     var result = "";
-    switch(originHeader){
-      case(?originHeader){
-        result := originHeader[0]
+    switch (originHeader) {
+      case (?originHeader) {
+        result := originHeader[0];
       };
-      case(null){
+      case (null) {
         return Http.BAD_REQUEST();
       };
     };
@@ -197,15 +288,15 @@ actor class PayString() = this {
     let acceptHeader = headers.get("Accept");
     let versionHeader = headers.get("PayID-Version");
 
-    switch(versionHeader){
-      case(?versionHeader){
-        if(versionHeader[0] != Constants.Version) return Http.BAD_REQUEST();
+    switch (versionHeader) {
+      case (?versionHeader) {
+        if (versionHeader[0] != Constants.Version) return Http.BAD_REQUEST();
       };
-      case(null){
+      case (null) {
         return Http.BAD_REQUEST();
       };
     };
-    
+
     var addressBuffer : Buffer.Buffer<JSON> = Buffer.fromArray([]);
     var json : JSON = #Null;
     switch (acceptHeader) {
