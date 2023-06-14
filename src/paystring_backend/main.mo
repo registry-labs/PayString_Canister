@@ -121,46 +121,75 @@ actor class PayString() = this {
     _getPrice(name);
   };
 
-  private func _isMaleName(name : Text) : Bool {
-    let exist = Array.find(MaleNames.names,func(e:Text):Bool {
-      Utils.toLowerCase(name) == Utils.toLowerCase(e)
-    });
-    switch(exist){
-      case(?exist){
-        return true
+  public query func getPayId(payId : Text, paymentNetwork : Text, environment : ?Text) : async [Address] {
+    let exist = HashMap.get(payIds, payId, tHash, tEqual);
+    switch (exist) {
+      case (?exist) {
+        let address = Array.filter(
+          exist,
+          func(e : Address) : Bool {
+            if(paymentNetwork == "payid"){
+              e.environment == environment
+            }else {
+              e.paymentNetwork == paymentNetwork and e.environment == environment
+            }
+            
+          },
+        );
       };
-      case(null){
-        return false
-      }
-    }
+      case (_) { [] };
+    };
+  };
+
+  private func _isMaleName(name : Text) : Bool {
+    let exist = Array.find(
+      MaleNames.names,
+      func(e : Text) : Bool {
+        Utils.toLowerCase(name) == Utils.toLowerCase(e);
+      },
+    );
+    switch (exist) {
+      case (?exist) {
+        return true;
+      };
+      case (null) {
+        return false;
+      };
+    };
   };
 
   private func _isFemaleName(name : Text) : Bool {
-    let exist = Array.find(FemaleNames.names,func(e:Text):Bool {
-      Utils.toLowerCase(name) == Utils.toLowerCase(e)
-    });
-    switch(exist){
-      case(?exist){
-        return true
+    let exist = Array.find(
+      FemaleNames.names,
+      func(e : Text) : Bool {
+        Utils.toLowerCase(name) == Utils.toLowerCase(e);
+      },
+    );
+    switch (exist) {
+      case (?exist) {
+        return true;
       };
-      case(null){
-        return false
-      }
-    }
+      case (null) {
+        return false;
+      };
+    };
   };
 
   private func _isFemaleName2(name : Text) : Bool {
-    let exist = Array.find(FemaleNames2.names,func(e:Text):Bool {
-      Utils.toLowerCase(name) == Utils.toLowerCase(e)
-    });
-    switch(exist){
-      case(?exist){
-        return true
+    let exist = Array.find(
+      FemaleNames2.names,
+      func(e : Text) : Bool {
+        Utils.toLowerCase(name) == Utils.toLowerCase(e);
+      },
+    );
+    switch (exist) {
+      case (?exist) {
+        return true;
       };
-      case(null){
-        return false
-      }
-    }
+      case (null) {
+        return false;
+      };
+    };
   };
 
   public query func getPayIdCount() : async Nat32 {
@@ -194,12 +223,12 @@ actor class PayString() = this {
 
   private func _getPrice(name : Text) : Nat {
 
-    if(_isMaleName(name)){
-      return 1000000000
-    }else if(_isFemaleName(name)){
-      return 1000000000
-    }else if(_isFemaleName2(name)){
-      return 1000000000
+    if (_isMaleName(name)) {
+      return 10000000000;
+    } else if (_isFemaleName(name)) {
+      return 10000000000;
+    } else if (_isFemaleName2(name)) {
+      return 10000000000;
     };
 
     let exist = HashMap.get(prices, Nat32.fromNat(name.size()), n32Hash, n32Equal);
@@ -311,7 +340,7 @@ actor class PayString() = this {
               let blob = Text.encodeUtf8(JSON.show(json));
               return {
                 status_code = 200;
-                headers = [("Content-Type", "application/json")];
+                headers = Constants.Default_Headers;
                 body = blob;
               };
             };
