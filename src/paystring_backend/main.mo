@@ -51,13 +51,13 @@ actor class PayString() = this {
     prices := HashMap.insert(prices, symbolSize, n32Hash, n32Equal, price).0;
   };
 
-  public shared ({ caller }) func auction(payString : Text) : async Nat32 {
+  public shared ({ caller }) func auction(payId : Text) : async Nat32 {
     let nftCanister = Principal.fromText(Constants.NFT_Canister);
     //let allowance = await DIP20.service(Constants.WICP_Canister).allowance(caller,nftCanister);
-    let price = _getPrice(payString);
+    let price = _getPrice(payId);
     //if(allowance < price) throw(Error.reject("Insufficient Allowance"));
     let day = 86400;
-    let blob = Text.encodeUtf8(Utils.toLowerCase(payString));
+    let blob = Text.encodeUtf8(Utils.toLowerCase(payId));
     let mintId = await NFT.service().mint(blob, Principal.fromActor(this));
     let auctionRequest = {
       duration = day * 3;
