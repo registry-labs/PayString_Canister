@@ -19,6 +19,8 @@ import Constants "Constants";
 import FemaleNames "common/FemaleNames";
 import FemaleNames2 "common/FemaleNames2";
 import MaleNames "common/MaleNames";
+import NFT "./services/NFT";
+import DIP20 "./services/Dip20";
 
 actor class PayString() = this {
 
@@ -36,7 +38,7 @@ actor class PayString() = this {
   private type Address = Address.Address;
 
   private stable var payIdCount : Nat32 = 1;
-  private stable var manifest = HashMap.empty<Principal, [Text]>();
+  //private stable var manifest = HashMap.empty<Principal, [Text]>();
   private stable var payIds = HashMap.empty<Text, [Address]>();
   private stable var admins = StableBuffer.init<(Principal)>();
   private stable var prices = HashMap.empty<Nat32, Nat>();
@@ -49,13 +51,27 @@ actor class PayString() = this {
     prices := HashMap.insert(prices, symbolSize, n32Hash, n32Equal, price).0;
   };
 
-  public shared ({ caller }) func create(request : AddressRequest) : async () {
-    if (request.payId.size() < 1) throw (Error.reject("Bad Request"));
+  public shared ({ caller }) func auction(payString : Text) : async Nat32 {
+    let nftCanister = Principal.fromText(Constants.NFT_Canister);
+    //let allowance = await DIP20.service(Constants.WICP_Canister).allowance(caller,nftCanister);
+    let price = _getPrice(payString);
+    //if(allowance < price) throw(Error.reject("Insufficient Allowance"));
+    let day = 86400;
+    let blob = Text.encodeUtf8(Utils.toLowerCase(payString));
+    let mintId = await NFT.service().mint(blob, Principal.fromActor(this));
+    let auctionRequest = {
+      duration = day * 3;
+      mintId = mintId;
+      amount = price;
+      token = #Dip20(Constants.WICP_Canister);
+    };
+    await NFT.service().auctionAndBid(auctionRequest,caller);
+    mintId;
+  };
+
+  public shared ({ caller }) func update(request : AddressRequest) : async () {
+    await _isOwner(caller, request.payId);
     let payId = Utils.toLowerCase(request.payId);
-    let payStringExist = _payStringExist(request.payId);
-    if (payStringExist) throw (Error.reject("Paystring Already Exist"));
-    let currentpayIdCount = payIdCount;
-    payIdCount := payIdCount + 1;
     let addresses : Buffer.Buffer<Address> = Buffer.fromArray([]);
     for (address in request.addresses.vals()) {
       var environment : ?Text = null;
@@ -73,17 +89,15 @@ actor class PayString() = this {
       };
       addresses.add(_address);
     };
-    manifest := HashMap.insert(manifest, caller, pHash, pEqual, [payId]).0;
     payIds := HashMap.insert(payIds, payId, tHash, tEqual, Buffer.toArray(addresses)).0;
 
   };
 
-  public shared ({ caller }) func update(payId : Text, request : AddressRequest) : async () {
-    let _payId = Utils.toLowerCase(payId);
-    let isOwner = await* _isOwner(caller, _payId);
-    if (isOwner == false) throw (Error.reject("UnAuthorized"));
-    let addresses : Buffer.Buffer<Address> = Buffer.fromArray([]);
-    for (address in request.addresses.vals()) {
+  public shared ({ caller }) func add(payId : Text, addresses : [Address]) : async () {
+    await _isOwner(caller, payId);
+    var _addresses = _getPayId(payId, "payid", null);
+    let addressBuffer : Buffer.Buffer<Address> = Buffer.fromArray([]);
+    for (address in addresses.vals()) {
       var environment : ?Text = null;
       switch (address.environment) {
         case (?_environment) environment := ?Utils.toLowerCase(_environment);
@@ -97,20 +111,10 @@ actor class PayString() = this {
         addressDetailsType = address.addressDetailsType;
         addressDetails = address.addressDetails;
       };
-      addresses.add(_address);
+      addressBuffer.add(_address);
     };
-    payIds := HashMap.insert(payIds, _payId, tHash, tEqual, Buffer.toArray(addresses)).0;
-
-  };
-
-  public shared ({ caller }) func delete(payId : Text) : async () {
-    assert (payIdCount > 0);
-    if (payId.size() < 1) throw (Error.reject("Bad Request"));
-    let currentpayIdCount = payIdCount;
-    payIdCount := payIdCount - 1;
-    let isOwner = await* _isOwner(caller, payId);
-    if (isOwner == false) throw (Error.reject("UnAuthroized"));
-    payIds := HashMap.remove(payIds, payId, tHash, tEqual).0;
+    _addresses := Array.append(_addresses,Buffer.toArray(addressBuffer));
+    payIds := HashMap.insert(payIds, payId, tHash, tEqual, _addresses).0;
   };
 
   public query func payStringExist(payString : Text) : async Bool {
@@ -122,20 +126,23 @@ actor class PayString() = this {
   };
 
   public query func getPayId(payId : Text, paymentNetwork : Text, environment : ?Text) : async [Address] {
+    _getPayId(payId, paymentNetwork, environment);
+  };
+
+  private func _getPayId(payId : Text, paymentNetwork : Text, environment : ?Text) : [Address] {
     let exist = HashMap.get(payIds, payId, tHash, tEqual);
     switch (exist) {
       case (?exist) {
-        let address = Array.filter(
+        if(paymentNetwork == "payid"){
+          exist
+        }else{
+          let address = Array.filter(
           exist,
           func(e : Address) : Bool {
-            if(paymentNetwork == "payid"){
-              e.environment == environment
-            }else {
-              e.paymentNetwork == paymentNetwork and e.environment == environment
-            }
-            
+             e.paymentNetwork == paymentNetwork and e.environment == environment
           },
         );
+        }
       };
       case (_) { [] };
     };
@@ -196,9 +203,9 @@ actor class PayString() = this {
     payIdCount;
   };
 
-  public query ({ caller }) func fetchPayIds() : async [Text] {
+  /*public query ({ caller }) func fetchPayIds() : async [Text] {
     _fetchPayIds(caller);
-  };
+  };*/
 
   public query func http_request(request : HttpParser.HttpRequest) : async HttpParser.HttpResponse {
     let req = HttpParser.parse(request);
@@ -258,22 +265,24 @@ actor class PayString() = this {
     };
   };
 
-  private func _isOwner(caller : Principal, payString : Text) : async* Bool {
-    let _payIds = _fetchPayIds(caller);
-    let exist = Array.find(_payIds, func(e : Text) : Bool { e == payString });
+  private func _isOwner(caller : Principal, payString : Text) : async () {
+    if (payString.size() < 1) throw (Error.reject("Bad Request"));
+    let blob = Text.encodeUtf8(Utils.toLowerCase(payString));
+    let metadataList = await NFT.service().balance(caller);
+    let exist = Array.find(metadataList, func(e : NFT.Metadata) : Bool { e.data == blob });
     switch (exist) {
-      case (?exist) true;
-      case (null) false;
+      case (?exist) {};
+      case (null) throw(Error.reject("Not Authorized"));
     };
   };
 
-  private func _fetchPayIds(owner : Principal) : [Text] {
+  /*private func _fetchPayIds(owner : Principal) : [Text] {
     let exist = HashMap.get(manifest, owner, pHash, pEqual);
     switch (exist) {
       case (?exist) exist;
       case (null)[];
     };
-  };
+  };*/
 
   private func _blobResponse(blob : Blob) : Http.Response {
     let response : Http.Response = {
