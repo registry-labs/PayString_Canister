@@ -93,28 +93,14 @@ actor class PayString() = this {
 
   };
 
-  public shared ({ caller }) func add(payId : Text, addresses : [Address]) : async () {
+  public shared ({ caller }) func add(payId : Text, address : Address) : async () {
     let _payId = Utils.toLowerCase(payId);
     await _isOwner(caller, _payId);
     var _addresses = _getPayId(_payId, "payid", null);
-    let addressBuffer : Buffer.Buffer<Address> = Buffer.fromArray([]);
-    for (address in addresses.vals()) {
-      var environment : ?Text = null;
-      switch (address.environment) {
-        case (?_environment) environment := ?Utils.toLowerCase(_environment);
-        case (_) {
-
-        };
-      };
-      let _address : Address = {
-        paymentNetwork = Utils.toLowerCase(address.paymentNetwork);
-        environment = environment;
-        addressDetailsType = address.addressDetailsType;
-        addressDetails = address.addressDetails;
-      };
-      addressBuffer.add(_address);
-    };
-    _addresses := Array.append(_addresses,Buffer.toArray(addressBuffer));
+    _addresses := Array.filter(_addresses,func(e:Address):Bool{
+      e.paymentNetwork != address.paymentNetwork and e.environment != address.environment
+    });
+    _addresses := Array.append(_addresses,[address]);
     payIds := HashMap.insert(payIds, _payId, tHash, tEqual, _addresses).0;
   };
 
