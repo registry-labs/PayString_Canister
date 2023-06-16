@@ -231,13 +231,13 @@ actor class PayString() = this {
 
   private func _getPrice(name : Text) : Nat {
 
-    if (_isMaleName(name)) {
+    /*if (_isMaleName(name)) {
       return 10000000000;
     } else if (_isFemaleName(name)) {
       return 10000000000;
     } else if (_isFemaleName2(name)) {
       return 10000000000;
-    };
+    };*/
 
     let exist = HashMap.get(prices, Nat32.fromNat(name.size()), n32Hash, n32Equal);
     switch (exist) {
