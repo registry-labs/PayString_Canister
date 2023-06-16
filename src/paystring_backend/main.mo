@@ -94,8 +94,9 @@ actor class PayString() = this {
   };
 
   public shared ({ caller }) func add(payId : Text, addresses : [Address]) : async () {
-    await _isOwner(caller, payId);
-    var _addresses = _getPayId(payId, "payid", null);
+    let _payId = Utils.toLowerCase(payId);
+    await _isOwner(caller, _payId);
+    var _addresses = _getPayId(_payId, "payid", null);
     let addressBuffer : Buffer.Buffer<Address> = Buffer.fromArray([]);
     for (address in addresses.vals()) {
       var environment : ?Text = null;
@@ -114,7 +115,7 @@ actor class PayString() = this {
       addressBuffer.add(_address);
     };
     _addresses := Array.append(_addresses,Buffer.toArray(addressBuffer));
-    payIds := HashMap.insert(payIds, payId, tHash, tEqual, _addresses).0;
+    payIds := HashMap.insert(payIds, _payId, tHash, tEqual, _addresses).0;
   };
 
   public query func payStringExist(payString : Text) : async Bool {
