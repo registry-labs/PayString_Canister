@@ -69,28 +69,20 @@ actor class PayString() = this {
     mintId;
   };
 
-  public shared ({ caller }) func update(request : AddressRequest) : async () {
-    await _isOwner(caller, request.payId);
-    let payId = Utils.toLowerCase(request.payId);
-    let addresses : Buffer.Buffer<Address> = Buffer.fromArray([]);
-    for (address in request.addresses.vals()) {
-      var environment : ?Text = null;
-      switch (address.environment) {
-        case (?_environment) environment := ?Utils.toLowerCase(_environment);
-        case (_) {
+  public shared ({ caller }) func delete(payId : Text, address : Address) : async () {
+    let _payId = Utils.toLowerCase(payId);
+    await _isOwner(caller, _payId);
+    var _addresses = _getPayId(_payId, "payid", null);
+    _addresses := Array.filter(_addresses,func(e:Address):Bool{
+      e.paymentNetwork != address.paymentNetwork and e.environment != address.environment
+    });
+    payIds := HashMap.insert(payIds, _payId, tHash, tEqual, _addresses).0;
+  };
 
-        };
-      };
-      let _address : Address = {
-        paymentNetwork = Utils.toLowerCase(address.paymentNetwork);
-        environment = environment;
-        addressDetailsType = address.addressDetailsType;
-        addressDetails = address.addressDetails;
-      };
-      addresses.add(_address);
-    };
-    payIds := HashMap.insert(payIds, payId, tHash, tEqual, Buffer.toArray(addresses)).0;
-
+  public shared ({ caller }) func deleteAll(payId : Text) : async () {
+    let _payId = Utils.toLowerCase(payId);
+    await _isOwner(caller, _payId);
+    payIds := HashMap.insert(payIds, _payId, tHash, tEqual, []).0;
   };
 
   public shared ({ caller }) func add(payId : Text, address : Address) : async () {
