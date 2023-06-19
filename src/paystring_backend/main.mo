@@ -74,7 +74,9 @@ actor class PayString() = this {
     await _isOwner(caller, _payId);
     var _addresses = _getPayId(_payId, "payid", null);
     _addresses := Array.filter(_addresses,func(e:Address):Bool{
-      e.paymentNetwork != address.paymentNetwork and e.environment != address.environment
+      let value1 = Text.concat(e.paymentNetwork,Utils.unwrap(e.environment));
+      let value2 = Text.concat(address.paymentNetwork,Utils.unwrap(address.environment));
+      value1 != value2
     });
     payIds := HashMap.insert(payIds, _payId, tHash, tEqual, _addresses).0;
   };
@@ -87,10 +89,12 @@ actor class PayString() = this {
 
   public shared ({ caller }) func add(payId : Text, address : Address) : async () {
     let _payId = Utils.toLowerCase(payId);
-    await _isOwner(caller, _payId);
+    //await _isOwner(caller, _payId);
     var _addresses = _getPayId(_payId, "payid", null);
     _addresses := Array.filter(_addresses,func(e:Address):Bool{
-      e.paymentNetwork != address.paymentNetwork and e.environment != address.environment
+      let value1 = Text.concat(e.paymentNetwork,Utils.unwrap(e.environment));
+      let value2 = Text.concat(address.paymentNetwork,Utils.unwrap(address.environment));
+      value1 != value2
     });
     _addresses := Array.append(_addresses,[address]);
     payIds := HashMap.insert(payIds, _payId, tHash, tEqual, _addresses).0;
