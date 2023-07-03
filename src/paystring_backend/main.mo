@@ -89,7 +89,7 @@ actor class PayString() = this {
 
   public shared ({ caller }) func add(payId : Text, address : Address) : async () {
     let _payId = Utils.toLowerCase(payId);
-    //await _isOwner(caller, _payId);
+    await _isOwner(caller, _payId);
     var _addresses = _getPayId(_payId, "payid", null);
     _addresses := Array.filter(_addresses,func(e:Address):Bool{
       let value1 = Text.concat(e.paymentNetwork,Utils.unwrap(e.environment));
