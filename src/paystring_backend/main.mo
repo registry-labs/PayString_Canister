@@ -52,15 +52,17 @@ actor class PayString() = this {
   };
 
   public shared ({ caller }) func auction(payId : Text) : async Nat32 {
+    assert(caller != Principal.fromText("2vxsx-fae"));
     let nftCanister = Principal.fromText(Constants.NFT_Canister);
-    //let allowance = await DIP20.service(Constants.WICP_Canister).allowance(caller,nftCanister);
+    let allowance = await DIP20.service(Constants.WICP_Canister).allowance(caller,nftCanister);
     let price = _getPrice(payId);
-    //if(allowance < price) throw(Error.reject("Insufficient Allowance"));
+    if(allowance < price) throw(Error.reject("Insufficient Allowance"));
     let day = 86400;
+    let mins = 60 * 2;
     let blob = Text.encodeUtf8(Utils.toLowerCase(payId));
     let mintId = await NFT.service().mint(blob, Principal.fromActor(this));
     let auctionRequest = {
-      duration = day * 3;
+      duration = mins;
       mintId = mintId;
       amount = price;
       token = #Dip20(Constants.WICP_Canister);
@@ -70,6 +72,7 @@ actor class PayString() = this {
   };
 
   public shared ({ caller }) func delete(payId : Text, address : Address) : async () {
+    assert(caller != Principal.fromText("2vxsx-fae"));
     let _payId = Utils.toLowerCase(payId);
     await _isOwner(caller, _payId);
     var _addresses = _getPayId(_payId, "payid", null);
@@ -82,12 +85,14 @@ actor class PayString() = this {
   };
 
   public shared ({ caller }) func deleteAll(payId : Text) : async () {
+    assert(caller != Principal.fromText("2vxsx-fae"));
     let _payId = Utils.toLowerCase(payId);
     await _isOwner(caller, _payId);
     payIds := HashMap.insert(payIds, _payId, tHash, tEqual, []).0;
   };
 
   public shared ({ caller }) func add(payId : Text, address : Address) : async () {
+    assert(caller != Principal.fromText("2vxsx-fae"));
     let _payId = Utils.toLowerCase(payId);
     await _isOwner(caller, _payId);
     var _addresses = _getPayId(_payId, "payid", null);
@@ -224,7 +229,8 @@ actor class PayString() = this {
     let exist = HashMap.get(prices, Nat32.fromNat(name.size()), n32Hash, n32Equal);
     switch (exist) {
       case (?exist) exist;
-      case (_) 300000000;
+      //case (_) 300000000;
+      case (_) 1000;
     };
   };
 
