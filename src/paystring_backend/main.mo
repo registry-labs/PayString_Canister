@@ -98,10 +98,18 @@ actor class PayString() = this {
     var _addresses = _getPayId(_payId, "payid", null);
     _addresses := Array.filter(_addresses,func(e:Address):Bool{
       let value1 = Text.concat(e.paymentNetwork,Utils.unwrap(e.environment));
-      let value2 = Text.concat(address.paymentNetwork,Utils.unwrap(address.environment));
+      let value2 = Text.concat(Utils.toLowerCase(address.paymentNetwork),Utils.toLowerCase(Utils.unwrap(address.environment)));
       value1 != value2
     });
-    _addresses := Array.append(_addresses,[address]);
+
+    let _address = {
+        paymentNetwork = Utils.toLowerCase(address.paymentNetwork);
+        environment = ?Utils.toLowerCase(Utils.unwrap(address.environment));
+        addressDetailsType = address.addressDetailsType;
+        addressDetails = address.addressDetails
+    };
+
+    _addresses := Array.append(_addresses,[_address]);
     payIds := HashMap.insert(payIds, _payId, tHash, tEqual, _addresses).0;
   };
 
