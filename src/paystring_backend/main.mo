@@ -1,5 +1,6 @@
 import Principal "mo:base/Principal";
 import HashMap "mo:stable/HashMap";
+import HashMapPrim "mo:base/HashMap";
 import StableBuffer "mo:stable-buffer/StableBuffer";
 import JSON "mo:json/JSON";
 import Array "mo:base/Array";
@@ -21,6 +22,9 @@ import FemaleNames2 "common/FemaleNames2";
 import MaleNames "common/MaleNames";
 import NFT "./services/NFT";
 import DIP20 "./services/Dip20";
+import Prim "mo:⛔";
+import Prelude "mo:base/Prelude";
+import Nat "mo:base/Nat";
 
 actor class PayString() = this {
 
@@ -52,11 +56,11 @@ actor class PayString() = this {
   };
 
   public shared ({ caller }) func auction(payId : Text) : async Nat32 {
-    assert(caller != Principal.fromText("2vxsx-fae"));
+    assert (caller != Principal.fromText("2vxsx-fae"));
     let nftCanister = Principal.fromText(Constants.NFT_Canister);
-    let allowance = await DIP20.service(Constants.WICP_Canister).allowance(caller,nftCanister);
+    let allowance = await DIP20.service(Constants.WICP_Canister).allowance(caller, nftCanister);
     let price = _getPrice(payId);
-    if(allowance < price) throw(Error.reject("Insufficient Allowance"));
+    if (allowance < price) throw (Error.reject("Insufficient Allowance"));
     let day = 86400;
     let mins = 60 * 2;
     let blob = Text.encodeUtf8(Utils.toLowerCase(payId));
@@ -67,49 +71,55 @@ actor class PayString() = this {
       amount = price;
       token = #Dip20(Constants.WICP_Canister);
     };
-    await NFT.service().auctionAndBid(auctionRequest,caller);
+    await NFT.service().auctionAndBid(auctionRequest, caller);
     mintId;
   };
 
   public shared ({ caller }) func delete(payId : Text, address : Address) : async () {
-    assert(caller != Principal.fromText("2vxsx-fae"));
+    assert (caller != Principal.fromText("2vxsx-fae"));
     let _payId = Utils.toLowerCase(payId);
     await _isOwner(caller, _payId);
     var _addresses = _getPayId(_payId, "payid", null);
-    _addresses := Array.filter(_addresses,func(e:Address):Bool{
-      let value1 = Text.concat(e.paymentNetwork,Utils.unwrap(e.environment));
-      let value2 = Text.concat(address.paymentNetwork,Utils.unwrap(address.environment));
-      value1 != value2
-    });
+    _addresses := Array.filter(
+      _addresses,
+      func(e : Address) : Bool {
+        let value1 = Text.concat(e.paymentNetwork, Utils.unwrap(e.environment));
+        let value2 = Text.concat(address.paymentNetwork, Utils.unwrap(address.environment));
+        value1 != value2;
+      },
+    );
     payIds := HashMap.insert(payIds, _payId, tHash, tEqual, _addresses).0;
   };
 
   public shared ({ caller }) func deleteAll(payId : Text) : async () {
-    assert(caller != Principal.fromText("2vxsx-fae"));
+    assert (caller != Principal.fromText("2vxsx-fae"));
     let _payId = Utils.toLowerCase(payId);
     await _isOwner(caller, _payId);
     payIds := HashMap.insert(payIds, _payId, tHash, tEqual, []).0;
   };
 
   public shared ({ caller }) func add(payId : Text, address : Address) : async () {
-    assert(caller != Principal.fromText("2vxsx-fae"));
+    assert (caller != Principal.fromText("2vxsx-fae"));
     let _payId = Utils.toLowerCase(payId);
     await _isOwner(caller, _payId);
     var _addresses = _getPayId(_payId, "payid", null);
-    _addresses := Array.filter(_addresses,func(e:Address):Bool{
-      let value1 = Text.concat(e.paymentNetwork,Utils.unwrap(e.environment));
-      let value2 = Text.concat(Utils.toLowerCase(address.paymentNetwork),Utils.toLowerCase(Utils.unwrap(address.environment)));
-      value1 != value2
-    });
+    _addresses := Array.filter(
+      _addresses,
+      func(e : Address) : Bool {
+        let value1 = Text.concat(e.paymentNetwork, Utils.unwrap(e.environment));
+        let value2 = Text.concat(Utils.toLowerCase(address.paymentNetwork), Utils.toLowerCase(Utils.unwrap(address.environment)));
+        value1 != value2;
+      },
+    );
 
     let _address = {
-        paymentNetwork = Utils.toLowerCase(address.paymentNetwork);
-        environment = ?Utils.toLowerCase(Utils.unwrap(address.environment));
-        addressDetailsType = address.addressDetailsType;
-        addressDetails = address.addressDetails
+      paymentNetwork = Utils.toLowerCase(address.paymentNetwork);
+      environment = ?Utils.toLowerCase(Utils.unwrap(address.environment));
+      addressDetailsType = address.addressDetailsType;
+      addressDetails = address.addressDetails;
     };
 
-    _addresses := Array.append(_addresses,[_address]);
+    _addresses := Array.append(_addresses, [_address]);
     payIds := HashMap.insert(payIds, _payId, tHash, tEqual, _addresses).0;
   };
 
@@ -129,16 +139,16 @@ actor class PayString() = this {
     let exist = HashMap.get(payIds, payId, tHash, tEqual);
     switch (exist) {
       case (?exist) {
-        if(paymentNetwork == "payid"){
-          exist
-        }else{
+        if (paymentNetwork == "payid") {
+          exist;
+        } else {
           let address = Array.filter(
-          exist,
-          func(e : Address) : Bool {
-             e.paymentNetwork == paymentNetwork and e.environment == environment
-          },
-        );
-        }
+            exist,
+            func(e : Address) : Bool {
+              Utils.toLowerCase(e.paymentNetwork) == Utils.toLowerCase(paymentNetwork) and e.environment == environment
+            },
+          );
+        };
       };
       case (_) { [] };
     };
@@ -199,31 +209,6 @@ actor class PayString() = this {
     payIdCount;
   };
 
-  /*public query ({ caller }) func fetchPayIds() : async [Text] {
-    _fetchPayIds(caller);
-  };*/
-
-  public query func http_request(request : HttpParser.HttpRequest) : async HttpParser.HttpResponse {
-    let req = HttpParser.parse(request);
-    let { url } = req;
-    let { headers } = req;
-    let { path } = url;
-
-    switch (req.method, path.original) {
-      case (_) {
-        let path = Iter.toArray(Text.tokens(url.original, #text("/")));
-        if (path.size() == 2) {
-          let payId = path[1];
-          _payIdResponse(payId, headers);
-        } else {
-          return Http.BAD_REQUEST();
-          //return _headerResponse("Origin",headers);
-        };
-      };
-    };
-
-  };
-
   private func _getPrice(name : Text) : Nat {
 
     /*if (_isMaleName(name)) {
@@ -269,7 +254,7 @@ actor class PayString() = this {
     let exist = Array.find(metadataList, func(e : NFT.Metadata) : Bool { e.data == blob });
     switch (exist) {
       case (?exist) {};
-      case (null) throw(Error.reject("Not Authorized"));
+      case (null) throw (Error.reject("Not Authorized"));
     };
   };
 
@@ -281,30 +266,75 @@ actor class PayString() = this {
     };
   };*/
 
-  private func _blobResponse(blob : Blob) : Http.Response {
-    let response : Http.Response = {
-      status_code = 200;
-      headers = [("Content-Type", "application/json")];
-      body = blob;
-      streaming_strategy = null;
+  public query func http_request(req : Http.HttpRequest) : async Http.HttpResponse {
+    switch (req.method, req.url) {
+      case ("GET", _) {
+        let path = Iter.toArray(Text.tokens(req.url, #text("/")));
+        if (path.size() == 1) {
+          let payId = path[0];
+          _payIdResponse(payId, req.headers);
+        } else {
+          let path = Iter.toArray(Text.tokens(req.url, #text("/")));
+          {
+            status_code = 400;
+            headers = [];
+            body = Text.encodeUtf8(path[0]);
+            streaming_strategy = null;
+            upgrade = null;
+          };
+        };
+      };
+
+      case ("POST", _) {
+        {
+          status_code = 204;
+          headers = [];
+          body = "";
+          streaming_strategy = null;
+          upgrade = ?true;
+        };
+      };
+      case _ {
+        {
+          status_code = 400;
+          headers = [];
+          body = "Invalid request";
+          streaming_strategy = null;
+          upgrade = null;
+        };
+      };
     };
   };
 
-  private func _headerResponse(key : Text, headers : HttpParser.Headers) : Http.Response {
-    let originHeader = headers.get(key);
-    var result = "";
-    switch (originHeader) {
-      case (?originHeader) {
-        result := originHeader[0];
+  public func http_request_update(req : Http.HttpRequest) : async Http.HttpResponse {
+    switch (req.method) {
+      case ("POST") {
+        counter += 1;
+        {
+          status_code = 201;
+          headers = [("content-type", "text/plain")];
+          body = Text.encodeUtf8("Counter updated to " # Nat.toText(counter) # "\n");
+          streaming_strategy = null;
+          upgrade = null;
+        };
       };
-      case (null) {
-        return Http.BAD_REQUEST();
+      case _ {
+        {
+          status_code = 400;
+          headers = [];
+          body = "Invalid request";
+          streaming_strategy = null;
+          upgrade = null;
+        };
       };
     };
-    let response : Http.Response = {
+  };
+
+  private func _blobResponse(blob : Blob) : HttpParser.HttpResponse {
+    let response : HttpParser.HttpResponse = {
       status_code = 200;
       headers = [("Content-Type", "application/json")];
-      body = Text.encodeUtf8(result);
+      body = blob;
       streaming_strategy = null;
     };
   };
@@ -319,16 +349,44 @@ actor class PayString() = this {
     };
   };
 
-  private func _payIdResponse(payId : Text, headers : HttpParser.Headers) : HttpParser.HttpResponse {
-    let acceptHeader = headers.get("Accept");
-    let versionHeader = headers.get("PayID-Version");
+  private func _payIdResponse(payId : Text, headers : [Http.HeaderField]) : Http.HttpResponse {
+    let _headers = HashMapPrim.fromIter<Text, Text>(headers.vals(), 0, Text.equal, Text.hash);
+    var acceptHeader:?Text = null;
+    var versionHeader:?Text = null;
+    for(header in headers.vals()){
+      switch(header.0){
+        case("accept"){
+          acceptHeader := ?header.1;
+        };
+        case("payid-version"){
+          versionHeader := ?header.1;
+        };
+        case(_){
+
+        }
+      }
+    };
 
     switch (versionHeader) {
       case (?versionHeader) {
-        if (versionHeader[0] != Constants.Version) return Http.BAD_REQUEST();
+        if (versionHeader != Constants.Version) {
+          return {
+            status_code = 400;
+            headers = [];
+            body = Text.encodeUtf8(versionHeader);
+            streaming_strategy = null;
+            upgrade = null;
+          };
+        };
       };
       case (null) {
-        return Http.BAD_REQUEST();
+        return {
+          status_code = 400;
+          headers = [];
+          body = "Invalid request";
+          streaming_strategy = null;
+          upgrade = null;
+        };
       };
     };
 
@@ -336,24 +394,25 @@ actor class PayString() = this {
     var json : JSON = #Null;
     switch (acceptHeader) {
       case (?acceptHeader) {
-        if (acceptHeader.size() < 1) return Http.BAD_REQUEST();
-        let currency = Utils.getCurrenyFromText(acceptHeader[0]);
+        let currency = Utils.getCurrenyFromText(acceptHeader);
         let exist = HashMap.get(payIds, payId, tHash, tEqual);
         switch (exist) {
           case (?exist) {
-            if (currency.paymentNetwork == "payid") {
+            if (Utils.toLowerCase(currency.paymentNetwork) == "payid") {
               json := Utils.addressToJSON(payId, exist);
               let blob = Text.encodeUtf8(JSON.show(json));
               return {
                 status_code = 200;
                 headers = Constants.Default_Headers;
                 body = blob;
+                streaming_strategy = null;
+                upgrade = null;
               };
             };
             let address = Array.find(
               exist,
               func(e : Address) : Bool {
-                e.paymentNetwork == currency.paymentNetwork and e.environment == currency.environment
+                Utils.toLowerCase(e.paymentNetwork) == Utils.toLowerCase(currency.paymentNetwork) and e.environment == currency.environment
               },
             );
             switch (address) {
@@ -361,23 +420,50 @@ actor class PayString() = this {
                 json := Utils.addressToJSON(payId, [address]);
               };
               case (_) {
-                return return Http.NOT_FOUND();
+                return {
+                  status_code = 404;
+                  headers = [];
+                  body = "Not Found";
+                  streaming_strategy = null;
+                  upgrade = null;
+                };
               };
             };
           };
           case (_) {
-            return return Http.NOT_FOUND();
+            return {
+              status_code = 404;
+              headers = [];
+              body = "Not Found";
+              streaming_strategy = null;
+              upgrade = null;
+            };
           };
         };
         let blob = Text.encodeUtf8(JSON.show(json));
-        let response : HttpParser.HttpResponse = {
+        let response : Http.HttpResponse = {
           status_code = 200;
           headers = [("Content-Type", "application/json")];
           body = blob;
+          streaming_strategy = null;
+          upgrade = null;
         };
       };
-      case (_) return Http.BAD_REQUEST();
+      case (_) {
+        return {
+          status_code = 400;
+          headers = [];
+          body = "Invalid request";
+          streaming_strategy = null;
+          upgrade = null;
+        };
+      };
     };
   };
 
+  var counter = 0;
+
+  public query func getCounter() : async Nat {
+    counter;
+  };
 };
