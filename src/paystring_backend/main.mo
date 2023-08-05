@@ -25,6 +25,7 @@ import DIP20 "./services/Dip20";
 import Prim "mo:⛔";
 import Prelude "mo:base/Prelude";
 import Nat "mo:base/Nat";
+import Blob "mo:base/Blob";
 
 actor class PayString() = this {
 
@@ -47,8 +48,26 @@ actor class PayString() = this {
   private stable var admins = StableBuffer.init<(Principal)>();
   private stable var prices = HashMap.empty<Nat32, Nat>();
 
+  //private let day = 86400;
+  private var auctionTime = 60 * 2;
+
   StableBuffer.add(admins, Principal.fromText("j26ec-ix7zw-kiwcx-ixw6w-72irq-zsbyr-4t7fk-alils-u33an-kh6rk-7qe"));
   StableBuffer.add(admins, Principal.fromText("ve3v4-o7xuv-ijejl-vcyfx-hjy3b-owwtx-jte2k-2bciw-spskd-jgmvd-rqe"));
+  StableBuffer.add(admins, Principal.fromText("67f2i-73qpv-tdtgg-zahqf-stzcs-7c2cy-553aw-46roj-5rsyf-pd5ej-zqe"));
+
+  public query func getAuctionTime() : async Nat {
+    auctionTime
+  };
+
+  public shared ({caller}) func setAuctionTime(value:Nat) : async () {
+    await* _isAdmin(caller);
+    auctionTime := value
+  };
+  
+  public shared ({ caller }) func addAdmin(principal:Principal) : async () {
+    await* _isAdmin(caller);
+    StableBuffer.add(admins, principal);
+  };
 
   public shared ({ caller }) func setPrice(symbolSize : Nat32, price : Nat) : async () {
     await* _isAdmin(caller);
@@ -56,17 +75,16 @@ actor class PayString() = this {
   };
 
   public shared ({ caller }) func auction(payId : Text) : async Nat32 {
+    await* _isAdmin(caller);
     assert (caller != Principal.fromText("2vxsx-fae"));
     let nftCanister = Principal.fromText(Constants.NFT_Canister);
     let allowance = await DIP20.service(Constants.WICP_Canister).allowance(caller, nftCanister);
     let price = _getPrice(payId);
     if (allowance < price) throw (Error.reject("Insufficient Allowance"));
-    let day = 86400;
-    let mins = 60 * 2;
     let blob = Text.encodeUtf8(Utils.toLowerCase(payId));
     let mintId = await NFT.service().mint(blob, Principal.fromActor(this));
     let auctionRequest = {
-      duration = mins;
+      duration = auctionTime;
       mintId = mintId;
       amount = price;
       token = #Dip20(Constants.WICP_Canister);
@@ -258,14 +276,6 @@ actor class PayString() = this {
     };
   };
 
-  /*private func _fetchPayIds(owner : Principal) : [Text] {
-    let exist = HashMap.get(manifest, owner, pHash, pEqual);
-    switch (exist) {
-      case (?exist) exist;
-      case (null)[];
-    };
-  };*/
-
   public query func http_request(req : Http.HttpRequest) : async Http.HttpResponse {
     switch (req.method, req.url) {
       case ("GET", _) {
@@ -284,7 +294,15 @@ actor class PayString() = this {
           };
         };
       };
-
+      case ("OPTIONS", _) {
+        {
+          status_code = 204;
+          headers = [("Access-Control-Allow-Headers", "*")];
+          body = Blob.fromArray([]);
+          streaming_strategy = null;
+          upgrade = null;
+        };
+      };
       case ("POST", _) {
         {
           status_code = 204;
@@ -351,20 +369,20 @@ actor class PayString() = this {
 
   private func _payIdResponse(payId : Text, headers : [Http.HeaderField]) : Http.HttpResponse {
     let _headers = HashMapPrim.fromIter<Text, Text>(headers.vals(), 0, Text.equal, Text.hash);
-    var acceptHeader:?Text = null;
-    var versionHeader:?Text = null;
-    for(header in headers.vals()){
-      switch(header.0){
-        case("accept"){
+    var acceptHeader : ?Text = null;
+    var versionHeader : ?Text = null;
+    for (header in headers.vals()) {
+      switch (header.0) {
+        case ("accept") {
           acceptHeader := ?header.1;
         };
-        case("payid-version"){
+        case ("payid-version") {
           versionHeader := ?header.1;
         };
-        case(_){
+        case (_) {
 
-        }
-      }
+        };
+      };
     };
 
     switch (versionHeader) {
@@ -380,13 +398,7 @@ actor class PayString() = this {
         };
       };
       case (null) {
-        return {
-          status_code = 400;
-          headers = [];
-          body = "Invalid request";
-          streaming_strategy = null;
-          upgrade = null;
-        };
+
       };
     };
 
