@@ -2,7 +2,8 @@
   "canisters": {
     "paystring_backend": {
       "main": "src/paystring_backend/main.mo",
-      "type": "motoko"
+      "type": "motoko",
+      "source": [".ic-assets.json"]
     }
   },
   "defaults": {
