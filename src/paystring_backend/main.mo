@@ -48,6 +48,13 @@ actor class PayString() = this {
   private stable var earlyAccess = StableBuffer.init<(Principal)>();
   private stable var prices = HashMap.empty<Nat32, Nat>();
 
+  let dev = Principal.fromText("i47jd-kewyq-vcner-l4xf7-edf77-aw4xp-u2kpb-2qai2-6ie7k-tcngl-oqe");
+  let sid = Principal.fromText("2s6rb-y2idv-r4mal-tjthh-adoam-xy4vo-t3bfy-mm74e-y6hl5-yhbwd-kae");
+  let jon = Principal.fromText("j26ec-ix7zw-kiwcx-ixw6w-72irq-zsbyr-4t7fk-alils-u33an-kh6rk-7qe");
+  StableBuffer.add(earlyAccess, dev);
+  StableBuffer.add(earlyAccess, sid);
+  StableBuffer.add(earlyAccess, jon);
+
   //private let day = 86400;
   private var auctionTime = 60 * 2;
 
