@@ -8,6 +8,8 @@ import Buffer "mo:base/Buffer";
 import Iter "mo:base/Iter";
 import Text "mo:base/Text";
 import Nat32 "mo:base/Nat32";
+import Int "mo:base/Int";
+import Time "mo:base/Time";
 import List "mo:base/List";
 import HttpParser "mo:http-parser";
 import Option "mo:base/Option";
@@ -26,6 +28,9 @@ import Prim "mo:⛔";
 import Prelude "mo:base/Prelude";
 import Nat "mo:base/Nat";
 import Blob "mo:base/Blob";
+import Bucket "services/Bucket";
+import CertifiedData "mo:base/CertifiedData";
+import CertifiedCache "mo:certified-cache";
 
 actor class PayString() = this {
 
@@ -47,6 +52,11 @@ actor class PayString() = this {
   private stable var payIds = HashMap.empty<Text, [Address]>();
   private stable var earlyAccess = StableBuffer.init<(Principal)>();
   private stable var prices = HashMap.empty<Nat32, Nat>();
+  private stable var files = HashMap.empty<Text, Blob>();
+  stable var assets : [(Text, (Blob, Nat))] = [];
+  let day = 86400000000000;
+  let timeToLive = day * day;
+  var cache = CertifiedCache.fromEntries<Text, Blob>(assets, Text.equal, Text.hash, Text.encodeUtf8, func(b : Blob) : Blob { b }, timeToLive + Int.abs(Time.now()));
 
   let dev = Principal.fromText("i47jd-kewyq-vcner-l4xf7-edf77-aw4xp-u2kpb-2qai2-6ie7k-tcngl-oqe");
   let sid = Principal.fromText("2s6rb-y2idv-r4mal-tjthh-adoam-xy4vo-t3bfy-mm74e-y6hl5-yhbwd-kae");
@@ -58,18 +68,24 @@ actor class PayString() = this {
   //private let day = 86400;
   private var auctionTime = 60 * 2;
 
-  
+  system func preupgrade() {
+    assets := cache.entries();
+  };
+
+  system func postupgrade() {
+    ignore cache.pruneAll();
+  };
 
   public query func getAuctionTime() : async Nat {
-    auctionTime
+    auctionTime;
   };
 
-  public shared ({caller}) func setAuctionTime(value:Nat) : async () {
+  public shared ({ caller }) func setAuctionTime(value : Nat) : async () {
     await* _isEarlyAccess(caller);
-    auctionTime := value
+    auctionTime := value;
   };
-  
-  public shared ({ caller }) func addEarlyAccess(principal:Principal) : async () {
+
+  public shared ({ caller }) func addEarlyAccess(principal : Principal) : async () {
     await* _isEarlyAccess(caller);
     StableBuffer.add(earlyAccess, principal);
   };
@@ -288,6 +304,38 @@ actor class PayString() = this {
         if (path.size() == 1) {
           let payId = path[0];
           _payIdResponse(payId, req.headers);
+        } else if (path.size() == 2) {
+          if (path[0] == ".well-known" and path[1] == "ic-domains") {
+            let cached = cache.get(req.url);
+            switch cached {
+              case (?body) {
+                {
+                  status_code : Nat16 = 200;
+                  headers = [("content-type", "text/html"), cache.certificationHeader(req.url)];
+                  body = body;
+                  streaming_strategy = null;
+                  upgrade = null;
+                };
+              };
+              case null {
+                return {
+                  status_code = 404;
+                  headers = [];
+                  body = Blob.fromArray([]);
+                  streaming_strategy = null;
+                  upgrade = ?true;
+                };
+              };
+            };
+          } else {
+            {
+              status_code = 400;
+              headers = [];
+              body = "Invalid request";
+              streaming_strategy = null;
+              upgrade = null;
+            };
+          };
         } else {
           let path = Iter.toArray(Text.tokens(req.url, #text("/")));
           {
@@ -353,12 +401,13 @@ actor class PayString() = this {
     };
   };
 
-  private func _blobResponse(blob : Blob) : HttpParser.HttpResponse {
-    let response : HttpParser.HttpResponse = {
+  private func _blobResponse(blob : Blob) : Http.HttpResponse {
+    let response : Http.HttpResponse = {
       status_code = 200;
       headers = [("Content-Type", "application/json")];
       body = blob;
       streaming_strategy = null;
+      upgrade = null;
     };
   };
 
@@ -385,7 +434,8 @@ actor class PayString() = this {
           versionHeader := ?header.1;
         };
         case (_) {
-
+          acceptHeader := ?"application/payid-mainnet+json";
+          versionHeader := ?"1.0";
         };
       };
     };
@@ -483,4 +533,27 @@ actor class PayString() = this {
   public query func getCounter() : async Nat {
     counter;
   };
+
+  private func _getDomains() : Blob {
+    let exist = HashMap.get(files, "icdomains", tHash, tEqual);
+    switch (exist) {
+      case (?exist) exist;
+      case (_) Blob.fromArray([]);
+    };
+  };
+
+  public query func getCert() : async ?Blob {
+    cache.get("/.well-known/ic-domains");
+  };
+
+  public func certify() : async () {
+    let exist = HashMap.get(files, "icdomains", tHash, tEqual);
+    switch (exist) {
+      case (?exist) cache.put("/.well-known/ic-domains", exist, null);
+      case (_) {
+        throw (Error.reject("Not Found"));
+      };
+    };
+  };
+
 };
