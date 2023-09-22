@@ -139,6 +139,7 @@ actor class PayString() = this {
 
   public shared ({ caller }) func add(payId : Text, address : Address) : async () {
     assert (caller != Principal.fromText("2vxsx-fae"));
+    var addressBuffer : Buffer.Buffer<JSON> = Buffer.fromArray([]);
     let _payId = Utils.toLowerCase(payId);
     await _isOwner(caller, _payId);
     var _addresses = _getPayId(_payId, "payid", null);
@@ -160,6 +161,8 @@ actor class PayString() = this {
 
     _addresses := Array.append(_addresses, [_address]);
     payIds := HashMap.insert(payIds, _payId, tHash, tEqual, _addresses).0;
+    let json = Utils.addressToJSON(_payId, _addresses);
+    ignore _certify("/" #_payId, Text.encodeUtf8(JSON.show(json)));
   };
 
   public query func payStringExist(payString : Text) : async Bool {
@@ -303,7 +306,7 @@ actor class PayString() = this {
         let path = Iter.toArray(Text.tokens(req.url, #text("/")));
         if (path.size() == 1) {
           let payId = path[0];
-          _payIdResponse(payId, req.headers);
+          _payIdResponse(payId, req.headers, req.url);
         } else if (path.size() == 2) {
           if (path[0] == ".well-known" and path[1] == "ic-domains") {
             let cached = cache.get(req.url);
@@ -421,10 +424,10 @@ actor class PayString() = this {
     };
   };
 
-  private func _payIdResponse(payId : Text, headers : [Http.HeaderField]) : Http.HttpResponse {
+  private func _payIdResponse(payId : Text, headers : [Http.HeaderField], url : Text) : Http.HttpResponse {
     let _headers = HashMapPrim.fromIter<Text, Text>(headers.vals(), 0, Text.equal, Text.hash);
     var acceptHeader : ?Text = null;
-    var versionHeader : ?Text = null;
+    var versionHeader : ?Text = ?"1.0";
     for (header in headers.vals()) {
       switch (header.0) {
         case ("accept") {
@@ -434,8 +437,7 @@ actor class PayString() = this {
           versionHeader := ?header.1;
         };
         case (_) {
-          acceptHeader := ?"application/payid-mainnet+json";
-          versionHeader := ?"1.0";
+
         };
       };
     };
@@ -466,14 +468,26 @@ actor class PayString() = this {
         switch (exist) {
           case (?exist) {
             if (Utils.toLowerCase(currency.paymentNetwork) == "payid") {
-              json := Utils.addressToJSON(payId, exist);
-              let blob = Text.encodeUtf8(JSON.show(json));
-              return {
-                status_code = 200;
-                headers = Constants.Default_Headers;
-                body = blob;
-                streaming_strategy = null;
-                upgrade = null;
+              let cached = cache.get(url);
+              switch cached {
+                case (?body) {
+                  return {
+                    status_code : Nat16 = 200;
+                    headers = [("Content-Type", "application/json"), cache.certificationHeader(url)];
+                    body = body;
+                    streaming_strategy = null;
+                    upgrade = null;
+                  };
+                };
+                case (_) {
+                  return {
+                    status_code = 404;
+                    headers = [];
+                    body = "Invalid request";
+                    streaming_strategy = null;
+                    upgrade = null;
+                  };
+                };
               };
             };
             let address = Array.find(
@@ -487,12 +501,26 @@ actor class PayString() = this {
                 json := Utils.addressToJSON(payId, [address]);
               };
               case (_) {
-                return {
-                  status_code = 404;
-                  headers = [];
-                  body = "Not Found";
-                  streaming_strategy = null;
-                  upgrade = null;
+                let cached = cache.get(url);
+                switch cached {
+                  case (?body) {
+                    return {
+                      status_code : Nat16 = 200;
+                      headers = [("Content-Type", "application/json"), cache.certificationHeader(url)];
+                      body = body;
+                      streaming_strategy = null;
+                      upgrade = null;
+                    };
+                  };
+                  case (_) {
+                    return {
+                      status_code = 404;
+                      headers = [];
+                      body = "Invalid request";
+                      streaming_strategy = null;
+                      upgrade = null;
+                    };
+                  };
                 };
               };
             };
@@ -546,7 +574,7 @@ actor class PayString() = this {
     cache.get("/.well-known/ic-domains");
   };
 
-  public func certify() : async () {
+  /*public func certify(key:Text, value:Blob) : async () {
     let exist = HashMap.get(files, "icdomains", tHash, tEqual);
     switch (exist) {
       case (?exist) cache.put("/.well-known/ic-domains", exist, null);
@@ -554,6 +582,10 @@ actor class PayString() = this {
         throw (Error.reject("Not Found"));
       };
     };
+  };*/
+
+  public func _certify(key : Text, value : Blob) : async () {
+    cache.put(key, value, null);
   };
 
 };
