@@ -4,5 +4,5 @@ module {
     public let Default_Headers = [("Content-Type", "application/json")];
     public let NFT_Canister = "vrnop-riaaa-aaaan-qdzrq-cai";
     public let WICP_Canister = "utozz-siaaa-aaaam-qaaxq-cai";
-    //public let WICP_Canister = "tcw57-jyaaa-aaaan-qd6za-cai"; //TEST
+    public let Team_Canister = "m74ns-dqaaa-aaaan-qd4qq-cai";
 }

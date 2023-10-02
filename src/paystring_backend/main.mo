@@ -61,9 +61,12 @@ actor class PayString() = this {
   let dev = Principal.fromText("i47jd-kewyq-vcner-l4xf7-edf77-aw4xp-u2kpb-2qai2-6ie7k-tcngl-oqe");
   let sid = Principal.fromText("2s6rb-y2idv-r4mal-tjthh-adoam-xy4vo-t3bfy-mm74e-y6hl5-yhbwd-kae");
   let jon = Principal.fromText("j26ec-ix7zw-kiwcx-ixw6w-72irq-zsbyr-4t7fk-alils-u33an-kh6rk-7qe");
+  let remco = Principal.fromText("ve3v4-o7xuv-ijejl-vcyfx-hjy3b-owwtx-jte2k-2bciw-spskd-jgmvd-rqe");
+
   StableBuffer.add(earlyAccess, dev);
   StableBuffer.add(earlyAccess, sid);
   StableBuffer.add(earlyAccess, jon);
+  StableBuffer.add(earlyAccess, remco);
 
   //private let day = 86400;
   private var auctionTime = 60 * 2;
@@ -165,6 +168,11 @@ actor class PayString() = this {
     ignore _certify("/" #_payId, Text.encodeUtf8(JSON.show(json)));
   };
 
+  public query func getNode(paystring:Text): async Text {
+    //get the canisterId of the paystring node for this paystring and return it
+    ""
+  };
+
   public query func payStringExist(payString : Text) : async Bool {
     _payStringExist(payString);
   };
@@ -261,12 +269,13 @@ actor class PayString() = this {
       return 10000000000;
     };*/
 
-    let exist = HashMap.get(prices, Nat32.fromNat(name.size()), n32Hash, n32Equal);
+    /*let exist = HashMap.get(prices, Nat32.fromNat(name.size()), n32Hash, n32Equal);
     switch (exist) {
       case (?exist) exist;
       //case (_) 300000000;
       case (_) 1000;
-    };
+    };*/
+    300000000
   };
 
   private func _isEarlyAccess(principal : Principal) : async* () {
