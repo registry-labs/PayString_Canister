@@ -275,7 +275,7 @@ actor class PayString() = this {
       //case (_) 300000000;
       case (_) 1000;
     };*/
-    300000000
+    10000
   };
 
   private func _isAdmin(principal : Principal) : async* () {
@@ -349,11 +349,11 @@ actor class PayString() = this {
             };
           };
         } else {
-          let path = Iter.toArray(Text.tokens(req.url, #text("/")));
+          let html = "<head><meta http-equiv='Refresh' content='0; URL=https://app.upayed.me/' /></head>";
           {
-            status_code = 400;
-            headers = [];
-            body = Text.encodeUtf8(path[0]);
+            status_code = 200;
+            headers = [("content-type", "text/html")];
+            body = Text.encodeUtf8(html);
             streaming_strategy = null;
             upgrade = null;
           };
