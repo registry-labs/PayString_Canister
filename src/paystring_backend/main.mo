@@ -50,7 +50,7 @@ actor class PayString() = this {
   private stable var payIdCount : Nat32 = 1;
   //private stable var manifest = HashMap.empty<Principal, [Text]>();
   private stable var payIds = HashMap.empty<Text, [Address]>();
-  private stable var earlyAccess = StableBuffer.init<(Principal)>();
+  private stable var admins = StableBuffer.init<(Principal)>();
   private stable var prices = HashMap.empty<Nat32, Nat>();
   private stable var files = HashMap.empty<Text, Blob>();
   stable var assets : [(Text, (Blob, Nat))] = [];
@@ -63,10 +63,10 @@ actor class PayString() = this {
   let jon = Principal.fromText("j26ec-ix7zw-kiwcx-ixw6w-72irq-zsbyr-4t7fk-alils-u33an-kh6rk-7qe");
   let remco = Principal.fromText("ve3v4-o7xuv-ijejl-vcyfx-hjy3b-owwtx-jte2k-2bciw-spskd-jgmvd-rqe");
 
-  StableBuffer.add(earlyAccess, dev);
-  StableBuffer.add(earlyAccess, sid);
-  StableBuffer.add(earlyAccess, jon);
-  StableBuffer.add(earlyAccess, remco);
+  StableBuffer.add(admins, dev);
+  StableBuffer.add(admins, sid);
+  StableBuffer.add(admins, jon);
+  StableBuffer.add(admins, remco);
 
   //private let day = 86400;
   private var auctionTime = 60 * 2;
@@ -84,22 +84,22 @@ actor class PayString() = this {
   };
 
   public shared ({ caller }) func setAuctionTime(value : Nat) : async () {
-    await* _isEarlyAccess(caller);
+    await* _isAdmin(caller);
     auctionTime := value;
   };
 
   public shared ({ caller }) func addEarlyAccess(principal : Principal) : async () {
-    await* _isEarlyAccess(caller);
-    StableBuffer.add(earlyAccess, principal);
+    await* _isAdmin(caller);
+    StableBuffer.add(admins, principal);
   };
 
   public shared ({ caller }) func setPrice(symbolSize : Nat32, price : Nat) : async () {
-    await* _isEarlyAccess(caller);
+    await* _isAdmin(caller);
     prices := HashMap.insert(prices, symbolSize, n32Hash, n32Equal, price).0;
   };
 
   public shared ({ caller }) func auction(payId : Text) : async Nat32 {
-    await* _isEarlyAccess(caller);
+    //await* _isAdmin(caller);
     assert (caller != Principal.fromText("2vxsx-fae"));
     let nftCanister = Principal.fromText(Constants.NFT_Canister);
     let allowance = await DIP20.service(Constants.WICP_Canister).allowance(caller, nftCanister);
@@ -278,9 +278,9 @@ actor class PayString() = this {
     300000000
   };
 
-  private func _isEarlyAccess(principal : Principal) : async* () {
-    let earlyAccessArray = StableBuffer.toArray(earlyAccess);
-    let exist = Array.find(earlyAccessArray, func(e : Principal) : Bool { e == principal });
+  private func _isAdmin(principal : Principal) : async* () {
+    let adminsArray = StableBuffer.toArray(admins);
+    let exist = Array.find(adminsArray, func(e : Principal) : Bool { e == principal });
     switch (exist) {
       case (?exist) {};
       case (_) {
