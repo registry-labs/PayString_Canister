@@ -31,6 +31,7 @@ import Blob "mo:base/Blob";
 import Bucket "services/Bucket";
 import CertifiedData "mo:base/CertifiedData";
 import CertifiedCache "mo:certified-cache";
+import { recurringTimer; cancelTimer; setTimer } = "mo:base/Timer";
 
 actor class PayString() = this {
 
@@ -68,8 +69,8 @@ actor class PayString() = this {
   StableBuffer.add(admins, jon);
   StableBuffer.add(admins, remco);
 
-  //private let day = 86400;
-  private var auctionTime = 60 * 2;
+  private let dayInSec = 86400;
+  private var auctionTime = dayInSec * 3;
 
   system func preupgrade() {
     assets := cache.entries();
@@ -111,6 +112,25 @@ actor class PayString() = this {
       duration = auctionTime;
       mintId = mintId;
       amount = price;
+      token = #Dip20(Constants.WICP_Canister);
+    };
+    await NFT.service().auctionAndBid(auctionRequest, caller);
+    mintId;
+  };
+
+  public shared ({ caller }) func testAuction(payId : Text) : async Nat32 {
+    await* _isAdmin(caller);
+    assert (caller != Principal.fromText("2vxsx-fae"));
+    let nftCanister = Principal.fromText(Constants.NFT_Canister);
+    let allowance = await DIP20.service(Constants.WICP_Canister).allowance(caller, nftCanister);
+    let price = _getPrice(payId);
+    //if (allowance < price) throw (Error.reject("Insufficient Allowance"));
+    let blob = Text.encodeUtf8(Utils.toLowerCase(payId));
+    let mintId = await NFT.service().mint(blob, Principal.fromActor(this));
+    let auctionRequest = {
+      duration = 180;
+      mintId = mintId;
+      amount = 10000;
       token = #Dip20(Constants.WICP_Canister);
     };
     await NFT.service().auctionAndBid(auctionRequest, caller);
@@ -168,9 +188,9 @@ actor class PayString() = this {
     ignore _certify("/" #_payId, Text.encodeUtf8(JSON.show(json)));
   };
 
-  public query func getNode(paystring:Text): async Text {
+  public query func getNode(paystring : Text) : async Text {
     //get the canisterId of the paystring node for this paystring and return it
-    ""
+    "";
   };
 
   public query func payStringExist(payString : Text) : async Bool {
@@ -275,7 +295,7 @@ actor class PayString() = this {
       //case (_) 300000000;
       case (_) 1000;
     };*/
-    10000
+    300000000;
   };
 
   private func _isAdmin(principal : Principal) : async* () {
@@ -309,10 +329,17 @@ actor class PayString() = this {
     };
   };
 
+  //https://upayed.me/?search=r&page=1&limit=500
+  //https://upayed.me/?search=r
+
   public query func http_request(req : Http.HttpRequest) : async Http.HttpResponse {
+    let parser = HttpParser.parse(req);
+    let { url } = parser;
     switch (req.method, req.url) {
       case ("GET", _) {
         let path = Iter.toArray(Text.tokens(req.url, #text("/")));
+        let term = url.queryObj.get("search");
+        if (term != null) return _searchResponse(Option.get(term, ""));
         if (path.size() == 1) {
           let payId = path[0];
           _payIdResponse(payId, req.headers, req.url);
@@ -430,6 +457,27 @@ actor class PayString() = this {
       status_code = 200;
       headers = [("Content-Type", "application/json")];
       body = blob;
+    };
+  };
+
+  private func _searchResponse(term : Text) : Http.HttpResponse {
+    var names : Buffer.Buffer<JSON> = Buffer.fromArray([]);
+    for((key,value) in HashMap.entries(payIds)) {
+      let includes = Utils.includesText(key,term);
+      if(includes == true){
+        let json = #String(key);
+        names.add(json)
+      };
+    };
+
+    let json = JSON.show(#Array(Buffer.toArray(names)));
+
+    {
+      status_code = 200;
+      headers = [];
+      body = Text.encodeUtf8(json);
+      streaming_strategy = null;
+      upgrade = null;
     };
   };
 
@@ -579,22 +627,75 @@ actor class PayString() = this {
     };
   };
 
-  public query func getCert() : async ?Blob {
+  /*public query func getCert() : async ?Blob {
     cache.get("/.well-known/ic-domains");
   };
 
-  /*public func certify(key:Text, value:Blob) : async () {
-    let exist = HashMap.get(files, "icdomains", tHash, tEqual);
-    switch (exist) {
-      case (?exist) cache.put("/.well-known/ic-domains", exist, null);
-      case (_) {
-        throw (Error.reject("Not Found"));
-      };
-    };
+  public func certify(key:Text, value:Blob) : async () {
+    files := HashMap.insert(files, key, tHash, tEqual,value).0;
+    cache.put(key, value, null);
   };*/
 
   public func _certify(key : Text, value : Blob) : async () {
     cache.put(key, value, null);
   };
 
+  public shared ({ caller }) func claimAuction(mintId : Nat32) : async () {
+    let _this = Principal.fromActor(this);
+    let _owner = await NFT.service().getOwner(mintId);
+    let _winner = await NFT.service().getWinningBid(mintId);
+    let _auctions = await NFT.service().fetchAuctions();
+    let now = Time.now();
+    for (_auction in _auctions.vals()) {
+      if (_auction.mintId == mintId) {
+        if (_auction.end < now) {
+          if (_owner == _this) {
+            switch (_winner) {
+              case (?_winner) {
+                if (_winner.recipient == caller) {
+                  await NFT.service().transfer(_winner.recipient, mintId);
+                } else {
+                  throw (Error.reject("Not Authorized"));
+                };
+              };
+              case (_) {
+                throw (Error.reject("Not Found"));
+              };
+            };
+          } else {
+            throw (Error.reject("Not Authorized"));
+          };
+        } else {
+          throw (Error.reject("Not Authorized"));
+        };
+      };
+    };
+
+  };
+
+  /*public shared ({ caller }) func transferToWinners() : async () {
+    assert(caller == dev);
+    let _this = Principal.fromActor(this);
+    let now = Time.now();
+    let _auctions = await NFT.service().fetchAuctions();
+    //let auctionBuffer:Buffer.Buffer<NFT.Auction> = Buffer.fromArray([]);
+    for (_auction in _auctions.vals()) {
+      if (_auction.end < now) {
+        let _owner = await NFT.service().getOwner(_auction.mintId);
+        let _winner = await NFT.service().getWinningBid(_auction.mintId);
+        if (_owner == _this) {
+          switch (_winner) {
+            case (?_winner) {
+              await NFT.service().transfer(_winner.recipient, _auction.mintId);
+            };
+            case (_) {
+              throw (Error.reject("Not Found"));
+            };
+          };
+        } else {
+          throw (Error.reject("Not Authorized"));
+        };
+      };
+    };
+  };*/
 };
