@@ -339,7 +339,7 @@ actor class PayString() = this {
       case ("GET", _) {
         let path = Iter.toArray(Text.tokens(req.url, #text("/")));
         let term = url.queryObj.get("search");
-        if (term != null) return _searchResponse(Option.get(term, ""));
+        if (term != null) return _searchResponse(Option.get(term, ""),req.headers, req.url);
         if (path.size() == 1) {
           let payId = path[0];
           _payIdResponse(payId, req.headers, req.url);
@@ -460,13 +460,30 @@ actor class PayString() = this {
     };
   };
 
-  private func _searchResponse(term : Text) : Http.HttpResponse {
+  private func _searchResponse(term : Text, headers : [Http.HeaderField], url : Text) : Http.HttpResponse {
     var names : Buffer.Buffer<JSON> = Buffer.fromArray([]);
-    for((key,value) in HashMap.entries(payIds)) {
-      let includes = Utils.includesText(key,term);
-      if(includes == true){
-        let json = #String(key);
-        names.add(json)
+    let _headers = HashMapPrim.fromIter<Text, Text>(headers.vals(), 0, Text.equal, Text.hash);
+    var acceptHeader : ?Text = null;
+    var versionHeader : ?Text = ?"1.0";
+    for (header in headers.vals()) {
+      switch (header.0) {
+        case ("accept") {
+          acceptHeader := ?header.1;
+        };
+        case ("payid-version") {
+          versionHeader := ?header.1;
+        };
+        case (_) {
+
+        };
+      };
+
+    };
+    for ((payId, value) in HashMap.entries(payIds)) {
+      let includes = Utils.includesText(payId, term);
+      if (includes == true) {
+        let json = _getPayIdMappings(acceptHeader, payId, url);
+        names.add(json);
       };
     };
 
@@ -479,6 +496,69 @@ actor class PayString() = this {
       streaming_strategy = null;
       upgrade = null;
     };
+  };
+
+  /*private func _searchPayIdResponse(headers : [Http.HeaderField], url : Text) : Http.HttpResponse {
+
+     switch (versionHeader) {
+      case (?versionHeader) {
+        if (versionHeader != Constants.Version) {
+          return {
+            status_code = 400;
+            headers = [];
+            body = Text.encodeUtf8(versionHeader);
+            streaming_strategy = null;
+            upgrade = null;
+          };
+        };
+      };
+      case (null) {
+
+      };
+    };
+
+    var addressBuffer : Buffer.Buffer<JSON> = Buffer.fromArray([]);
+    var json : JSON = #Null;
+
+  };*/
+
+  private func _getPayIdMappings(acceptHeader : ?Text, payId : Text, url : Text) : JSON {
+    var json : JSON = #Null;
+    switch (acceptHeader) {
+      case (?acceptHeader) {
+        let currency = Utils.getCurrenyFromText(acceptHeader);
+        let exist = HashMap.get(payIds, payId, tHash, tEqual);
+        switch (exist) {
+          case (?exist) {
+            if (Utils.toLowerCase(currency.paymentNetwork) == "payid") {
+              json := Utils.addressToJSON(payId, exist);
+            };
+            let address = Array.find(
+              exist,
+              func(e : Address) : Bool {
+                Utils.toLowerCase(e.paymentNetwork) == Utils.toLowerCase(currency.paymentNetwork) and e.environment == currency.environment
+              },
+            );
+            switch (address) {
+              case (?address) {
+                json := Utils.addressToJSON(payId, [address]);
+              };
+              case (_) {
+                json := Utils.addressToJSON(payId, exist);
+              };
+            };
+          };
+          case (_) {
+
+          };
+        };
+
+      };
+      case (_) {
+
+      };
+    };
+    json;
   };
 
   private func _payIdResponse(payId : Text, headers : [Http.HeaderField], url : Text) : Http.HttpResponse {
