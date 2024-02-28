@@ -1,4 +1,7 @@
 {
+  "ic_siwe_provider": {
+    "ic": "bjgo7-hiaaa-aaaan-qlzca-cai"
+  },
   "paystring_backend": {
     "ic": "qbu4y-iaaaa-aaaan-qdvda-cai"
   }
