@@ -289,13 +289,13 @@ actor class PayString() = this {
       return 10000000000;
     };*/
 
-    /*let exist = HashMap.get(prices, Nat32.fromNat(name.size()), n32Hash, n32Equal);
+    let exist = HashMap.get(prices, Nat32.fromNat(name.size()), n32Hash, n32Equal);
     switch (exist) {
       case (?exist) exist;
       //case (_) 300000000;
-      case (_) 1000;
-    };*/
-    300000000;
+      case (_) 20000000;
+    };
+    //300000000;
   };
 
   private func _isAdmin(principal : Principal) : async* () {
